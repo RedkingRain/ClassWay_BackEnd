@@ -1,11 +1,27 @@
 package com.greenproject.classway.service;
 
+import com.greenproject.classway.dto.*;
+import com.greenproject.classway.entity.RefreshToken;
+import com.greenproject.classway.entity.User;
+import com.greenproject.classway.exceptions.*;
+import com.greenproject.classway.global.UserState;
 import com.greenproject.classway.repository.AccessTokenBlacklistRepository;
 import com.greenproject.classway.repository.RefreshTokenRepository;
 import com.greenproject.classway.repository.UserRepository;
+import com.greenproject.classway.security.JwtTokenProvider;
 import lombok.AllArgsConstructor;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.Date;
+import java.util.List;
+import java.util.Optional;
 
 @Service
 @AllArgsConstructor
@@ -13,6 +29,9 @@ public class AuthService {
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final AccessTokenBlacklistRepository accessTokenBlackListRepository;
+    private final AuthenticationManager authenticationManager;
+    private final JwtTokenProvider tokenProvider;
+    private final PasswordEncoder passwordEncoder;
 
     // 회원가입
     @Transactional
@@ -31,25 +50,53 @@ public class AuthService {
 
     // 로그인
     @Transactional
-    public void login() {
+    public LoginResponse login(LoginRequest loginRequest) {
         try {
-
-        } catch (Exception e) {
-
+            authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(loginRequest.getEmail(), loginRequest.getPassword())
+            );
+        } catch (AuthenticationException e) {
+            throw new UnauthenticatedException("아이디 또는 비밀번호가 올바르지 않습니다.");
         }
 
-        // 1.이메일과 비밀번호가 공백이 아닌지 확인
+        // 1. 계정 존재하는건지 확인
+        Optional<User> optionalUser = userRepository.findByEmail(loginRequest.getEmail());
 
-        // 2. 이메일 존재하는건지 확인
+        if (optionalUser.isEmpty()) {
+            throw new ResourceNotFoundException("존재하지 않는 계정 입니다.");
+        }
+
+        User user = optionalUser.get();
+
+        if (user.getStatus() == UserState.DISABLED) {
+            throw new ResourceNotFoundException("탈퇴된 회원입니다.");
+        }
+        else if (user.getStatus() == UserState.WITHDRAWN) {
+            throw new ResourceNotFoundException("휴면된 계정입니다.");
+        }
 
         // 엑세스 토큰 발급
+        String accessToken = tokenProvider.generateAccessToken(user.getEmail(), user.getId(), user.getRole().name());
+        String refreshToken = tokenProvider.generateRefreshToken(user.getName());
 
         // 3-1. 해당 유저의 기존 리프레시 토큰(들) 삭제
+        List<RefreshToken> tokens = refreshTokenRepository.findByUserId(user.getId());
+        refreshTokenRepository.deleteAll(tokens);
 
         // 3-2. 해당 유저의 신규 리프레시 토큰 저장
+        Date expiration = tokenProvider.getExpirationToken(refreshToken);
+        LocalDateTime expirationDatetime = expiration.toInstant().atZone(
+                ZoneId.systemDefault()
+        ).toLocalDateTime();
+
+        RefreshToken refreshTokenObj = new RefreshToken();
+        refreshTokenObj.setUser(user);
+        refreshTokenObj.setToken(refreshToken);
+        refreshTokenObj.setExpirationDatetime(expirationDatetime);
+        refreshTokenRepository.save(refreshTokenObj);
 
         // 4. 로그인 성공
-
+        return new LoginResponse(accessToken, refreshToken, user.getId(), user.getEmail(), user.getName(), user.getRole().name());
     }
 
     // 로그아웃(토큰 삭제)
