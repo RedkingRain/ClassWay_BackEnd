@@ -3,13 +3,16 @@ package com.greenproject.classway.service;
 import com.greenproject.classway.dto.*;
 import com.greenproject.classway.entity.AccessTokenBlacklist;
 import com.greenproject.classway.entity.RefreshToken;
+import com.greenproject.classway.entity.Tutor;
 import com.greenproject.classway.entity.User;
 import com.greenproject.classway.exceptions.*;
 import com.greenproject.classway.global.UserState;
 import com.greenproject.classway.repository.AccessTokenBlacklistRepository;
 import com.greenproject.classway.repository.RefreshTokenRepository;
+import com.greenproject.classway.repository.TutorRepository;
 import com.greenproject.classway.repository.UserRepository;
 import com.greenproject.classway.security.JwtTokenProvider;
+import com.greenproject.classway.service.file.FileStorageService;
 import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -30,25 +33,93 @@ import java.util.Optional;
 @AllArgsConstructor
 public class AuthService {
     private final UserRepository userRepository;
+    private final TutorRepository tutorRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final AccessTokenBlacklistRepository accessTokenBlackListRepository;
     private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider tokenProvider;
     private final PasswordEncoder passwordEncoder;
+    private final FileStorageService fileStorageService; // 인터페이스 주입
 
-    // 회원가입
+    // 수강생 회원가입
     @Transactional
-    public void signup() {
-        // 이메일과 비밀번호가 공백이 아닌지 확인
-
-        // username이 사용 중인지 확인
+    public void signupStudent(SignupStudentRequest signupStudentRequest) {
 
         // 이메일이 사용 중인지 확인
-
+        if (userRepository.existsByEmail(signupStudentRequest.getEmail())) {
+            throw new ResourceConflictException("Email already exists");
+        }
 
         // 비밀번호 해싱
+        String hashedPassword = passwordEncoder.encode(signupStudentRequest.getPassword());
 
         // db save
+        User user = new User();
+        user.setEmail(signupStudentRequest.getEmail());
+        user.setPassword(hashedPassword);
+        user.setName(signupStudentRequest.getName());
+        user.setPhone(signupStudentRequest.getPhone());
+        user.setRole(signupStudentRequest.getRole());
+        user.setClassAlarm(signupStudentRequest.getClass_alarm());
+        user.setMarketingAgree(signupStudentRequest.getMarketing_agree());
+
+        userRepository.save(user);
+    }
+
+    // 강사 회원가입
+    @Transactional
+    public void signupTutor(SignupTutorRequest signupTutorRequest) {
+
+        // 이메일이 사용 중인지 확인
+        if (userRepository.existsByEmail(signupTutorRequest.getEmail())) {
+            throw new ResourceConflictException("Email already exists");
+        }
+
+        // 비밀번호 해싱
+        String hashedPassword = passwordEncoder.encode(signupTutorRequest.getPassword());
+
+        // user table save
+        User user = new User();
+        user.setEmail(signupTutorRequest.getEmail());
+        user.setPassword(hashedPassword);
+        user.setName(signupTutorRequest.getName());
+        user.setPhone(signupTutorRequest.getPhone());
+        user.setRole(signupTutorRequest.getRole());
+        user.setClassAlarm(signupTutorRequest.getClass_alarm());
+        user.setMarketingAgree(signupTutorRequest.getMarketing_agree());
+
+        userRepository.save(user);
+
+        // tutor table save
+
+        Optional<User> optionalUser = userRepository.findById(signupTutorRequest.getApproved_by());
+
+        if (optionalUser.isEmpty()) {
+            throw new ResourceNotFoundException("존재하지 않는 계정 입니다.");
+        }
+
+        User admin = optionalUser.get();
+
+        Tutor tutor = new Tutor();
+        tutor.setUser(user);
+        tutor.setNickname(signupTutorRequest.getNickname());
+        tutor.setIntro(signupTutorRequest.getIntro());
+        tutor.setCareer(signupTutorRequest.getCareer());
+        tutor.setApprovedBy(admin);
+
+        // 1. 파일 저장 서비스 호출 (로컬이든 S3든 인터페이스를 통해 알아서 처리됨)
+        List<String> imageFilePaths = fileStorageService.storeFiles(signupTutorRequest.getProfile_image());
+        // 2. 반환받은 경로(URL) 리스트를 DB 엔티티에 매핑하여 저장
+        for (String path : imageFilePaths) {
+            tutor.setProfileImage(path);
+        }
+
+        List<String> documentFilePaths = fileStorageService.storeFiles(signupTutorRequest.getDocument_file());
+        for (String path : documentFilePaths) {
+            tutor.setDocumentUrl(path);
+        }
+
+        tutorRepository.save(tutor);
     }
 
     // 로그인
