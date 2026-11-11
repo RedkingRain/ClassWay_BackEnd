@@ -248,11 +248,23 @@ public class AuthService {
 
     // 접속자 정보 조회
     @Transactional(readOnly = true)
-    public void getUserInfo() {
+    public MyInfoResponse getUserInfo(String accessToken) {
         // 1. 유저 아이디로 DB 조회함
+        int userId = tokenProvider.getUserIdFromToken(accessToken);
+        Optional<User> optionalUser = userRepository.findById(userId);
 
-        // 2. DB에서 이 유저의 닉네임과 이메일을 받아옴.
+        if (optionalUser.isEmpty()) {
+            throw new ResourceNotFoundException("존재하지 않는 계정입니다.");
+        }
+
+        User user = optionalUser.get();
+
+        // 2. 유저 ID로 DB에서 이 유저의 이름과 이메일을 받아옴.
+        String name = user.getName();
+        String email = user.getEmail();
+
         // 3. MyInfoResponse 객체를 생성하여 돌려줌
+        return new MyInfoResponse(userId, email, name, user.getRole().name());
 
     }
 
