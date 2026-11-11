@@ -18,7 +18,7 @@ public class AuthController {
 
     @Operation(summary = "회원가입 API", description = "회원가입")
     @PostMapping("/signup/student")
-    public ResponseEntity<ApiResponse<Void>> signupStudent(@Valid @RequestBody SignupStudentRequest signupStudentRequest) {
+    public ResponseEntity<ApiResponse<Void>> signupStudent(@Valid @ModelAttribute SignupStudentRequest signupStudentRequest) {
         authService.signupStudent(signupStudentRequest);
         return ResponseEntity.ok(ApiResponse.ok());
     }

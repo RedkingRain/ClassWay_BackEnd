@@ -38,6 +38,12 @@ public class User {
     @Column(length = 20)
     private String phone;
 
+    @Column(nullable = false, length = 50)
+    private String nickname;
+
+    @Column(name = "profile_image", length = 255)
+    private String profileImage;
+
     @Column(nullable = false, length = 20)
     @Enumerated(EnumType.STRING)
     private UserRole role = UserRole.STUDENT;

@@ -21,17 +21,11 @@ public class Tutor {
     @JoinColumn(name = "user_id", nullable = false, unique = true)
     private User user;
 
-    @Column(nullable = false, length = 50)
-    private String nickname;
-
     @Column(columnDefinition = "TEXT")
     private String intro;
 
     @Column(columnDefinition = "TEXT")
     private String career;
-
-    @Column(name = "profile_image", length = 255)
-    private String profileImage;
 
     @Column(name = "document_url", length = 255)
     private String documentUrl;

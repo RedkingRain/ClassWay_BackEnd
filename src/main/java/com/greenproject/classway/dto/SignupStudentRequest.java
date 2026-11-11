@@ -9,6 +9,9 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
 
 @AllArgsConstructor
 @NoArgsConstructor
@@ -31,6 +34,11 @@ public class SignupStudentRequest {
     @NotBlank
     @Size(max = 13)
     private String phone;               // 휴대폰 번호
+
+    @NotBlank
+    private String nickname;	        // 사용자 활동명
+
+    private List<MultipartFile> profile_image;	// 프로필 사진 주소
 
     @NotNull
     private UserRole role;	            //역할: STUDENT, TUTOR, ADMIN (강사는 승인 후 TUTOR)

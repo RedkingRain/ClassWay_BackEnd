@@ -59,6 +59,15 @@ public class AuthService {
         user.setPassword(hashedPassword);
         user.setName(signupStudentRequest.getName());
         user.setPhone(signupStudentRequest.getPhone());
+        user.setNickname(signupStudentRequest.getNickname());
+
+        // 1. 파일 저장 서비스 호출 (로컬이든 S3든 인터페이스를 통해 알아서 처리됨)
+        List<String> imageFilePaths = fileStorageService.storeFiles(signupStudentRequest.getProfile_image());
+        // 2. 반환받은 경로(URL) 리스트를 DB 엔티티에 매핑하여 저장
+        for (String path : imageFilePaths) {
+            user.setProfileImage(path);
+        }
+
         user.setRole(signupStudentRequest.getRole());
         user.setClassAlarm(signupStudentRequest.getClass_alarm());
         user.setMarketingAgree(signupStudentRequest.getMarketing_agree());
@@ -84,6 +93,15 @@ public class AuthService {
         user.setPassword(hashedPassword);
         user.setName(signupTutorRequest.getName());
         user.setPhone(signupTutorRequest.getPhone());
+        user.setNickname(signupTutorRequest.getNickname());
+
+        // 1. 파일 저장 서비스 호출 (로컬이든 S3든 인터페이스를 통해 알아서 처리됨)
+        List<String> imageFilePaths = fileStorageService.storeFiles(signupTutorRequest.getProfile_image());
+        // 2. 반환받은 경로(URL) 리스트를 DB 엔티티에 매핑하여 저장
+        for (String path : imageFilePaths) {
+            user.setProfileImage(path);
+        }
+
         user.setRole(signupTutorRequest.getRole());
         user.setClassAlarm(signupTutorRequest.getClass_alarm());
         user.setMarketingAgree(signupTutorRequest.getMarketing_agree());
@@ -91,28 +109,18 @@ public class AuthService {
         userRepository.save(user);
 
         // tutor table save
-
-        Optional<User> optionalUser = userRepository.findById(signupTutorRequest.getApproved_by());
+        Optional<User> optionalUser = userRepository.findByEmail(signupTutorRequest.getEmail());
 
         if (optionalUser.isEmpty()) {
             throw new ResourceNotFoundException("존재하지 않는 계정 입니다.");
         }
 
-        User admin = optionalUser.get();
+        User newUser = optionalUser.get();
 
         Tutor tutor = new Tutor();
-        tutor.setUser(user);
-        tutor.setNickname(signupTutorRequest.getNickname());
+        tutor.setUser(newUser);
         tutor.setIntro(signupTutorRequest.getIntro());
         tutor.setCareer(signupTutorRequest.getCareer());
-        tutor.setApprovedBy(admin);
-
-        // 1. 파일 저장 서비스 호출 (로컬이든 S3든 인터페이스를 통해 알아서 처리됨)
-        List<String> imageFilePaths = fileStorageService.storeFiles(signupTutorRequest.getProfile_image());
-        // 2. 반환받은 경로(URL) 리스트를 DB 엔티티에 매핑하여 저장
-        for (String path : imageFilePaths) {
-            tutor.setProfileImage(path);
-        }
 
         List<String> documentFilePaths = fileStorageService.storeFiles(signupTutorRequest.getDocument_file());
         for (String path : documentFilePaths) {
