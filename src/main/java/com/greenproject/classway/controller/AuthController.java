@@ -17,8 +17,16 @@ public class AuthController {
     private final AuthService authService;
 
     @Operation(summary = "회원가입 API", description = "회원가입")
-    @PostMapping("/signup")
-    public ResponseEntity<ApiResponse<Void>> signup() {
+    @PostMapping("/signup/student")
+    public ResponseEntity<ApiResponse<Void>> signupStudent(@Valid @RequestBody SignupStudentRequest signupStudentRequest) {
+        authService.signupStudent(signupStudentRequest);
+        return ResponseEntity.ok(ApiResponse.ok());
+    }
+
+    @Operation(summary = "회원가입 API", description = "회원가입")
+    @PostMapping("/signup/tutor")
+    public ResponseEntity<ApiResponse<Void>> signupTutor(@Valid @ModelAttribute SignupTutorRequest signupTutorRequest) {
+        authService.signupTutor(signupTutorRequest);
         return ResponseEntity.ok(ApiResponse.ok());
     }
 

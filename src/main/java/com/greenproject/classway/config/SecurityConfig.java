@@ -56,7 +56,7 @@ public class SecurityConfig {
             )
             .authorizeHttpRequests(auth -> auth
                     // 로그인, 회원가입, 토큰 재발급 허용
-                    .requestMatchers("/auth/signup", "/auth/login", "/auth/refresh")
+                    .requestMatchers("/auth/signup/student", "/auth/signup/tutor", "/auth/login", "/auth/refresh")
                     .permitAll()
                     // Swagger URL 허용
                     .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**")
