@@ -40,6 +40,20 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
+    @Operation (summary = "현재 사용자 정보 조회 API", description = "인증된 사용자의 ID, 이메일, 이름, 역할을 반환")
+    @GetMapping("/me")
+    public ResponseEntity<ApiResponse<MyInfoResponse>> getUserInfo(
+            @RequestHeader("Authorization") String authorization
+    ) {
+        // 인증 필터를 통과한 요청의 헤더에서 "Bearer" 접두사 제거
+        String accessToken = authorization.substring(7);
+
+        // 서비스에서 현재 계정 정보를 조회
+        MyInfoResponse result = authService.getUserInfo(accessToken);
+
+        return ResponseEntity.ok(ApiResponse.ok(result));
+    }
+
     @Operation(summary = "로그아웃 API", description = "로그아웃하여 사용중인 엑세스 토큰 blacklist 관리 및 리프레시 토큰 삭제")
     @PostMapping("/logout")
     public ResponseEntity<ApiResponse<Void>> logout(
