@@ -24,7 +24,7 @@ public class InquiryFile {
     @Column(name = "file_name", nullable = false, length = 255)
     private String fileName;
 
-    @Column(name = "file_url", nullable = false, length = 255)
+    @Column(name = "file_url", nullable = false, unique = true, length = 255)
     private String fileUrl;
 
     @Column(nullable = false, length = 6)

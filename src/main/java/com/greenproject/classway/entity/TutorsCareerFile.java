@@ -6,25 +6,25 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "class_files")
+@Table(name = "tutors_career_files")
 @AllArgsConstructor
 @NoArgsConstructor
 @Getter
 @Setter
-public class ClassFile {
+public class TutorsCareerFile {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "file_id")
     private Integer fileId;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "class_id", nullable = false)
-    private ClassEntity clazz;
+    @JoinColumn(name = "tutor_id", nullable = false)
+    private Tutor tutor;
 
     @Column(name = "file_name", nullable = false, length = 255)
     private String fileName;
 
-    @Column(name = "file_url", nullable = false, length = 255)
+    @Column(name = "file_url", nullable = false, unique = true, length = 255)
     private String fileUrl;
 
     @Column(nullable = false, length = 6)

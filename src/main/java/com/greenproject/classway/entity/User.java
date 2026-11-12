@@ -35,7 +35,7 @@ public class User {
     @Column(nullable = false, length = 50)
     private String name;
 
-    @Column(length = 20)
+    @Column(nullable = false, length = 20)
     private String phone;
 
     @Column(nullable = false, length = 50)
@@ -61,8 +61,14 @@ public class User {
     @Column(name = "locked_until")
     private LocalDateTime lockedUntil;
 
-    @Column(name = "class_alarm", nullable = false)
-    private Boolean classAlarm = true;
+    @Column(name = "class_content_alarm", nullable = false)
+    private Boolean classContentAlarm = true;
+
+    @Column(name = "qna_alarm", nullable = false)
+    private Boolean qnaAlarm = true;
+
+    @Column(name = "offline_class_alarm", nullable = false)
+    private Boolean offlineClassAlarm = true;
 
     @Column(name = "marketing_agree", nullable = false)
     private Boolean marketingAgree = false;

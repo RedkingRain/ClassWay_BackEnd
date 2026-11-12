@@ -44,7 +44,13 @@ public class SignupStudentRequest {
     private UserRole role;	            //역할: STUDENT, TUTOR, ADMIN (강사는 승인 후 TUTOR)
 
     @NotNull
-    private Boolean class_alarm;	    // 수업 일정 알림 수신
+    private Boolean class_content_alarm;    // 클래스 신규 강의 컨텐츠 등록 알람 수신
+
+    @NotNull
+    private Boolean qna_alarm;              // 고객센터 1:1문의 및 강사 문의 답변 알림 수신
+
+    @NotNull
+    private Boolean offline_class_alarm;    // 오프라인 수업 일정 알림 수신
 
     @NotNull
     private Boolean marketing_agree;	// 마케팅 수신 동의 (선택 약관)

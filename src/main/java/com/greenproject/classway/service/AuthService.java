@@ -1,16 +1,11 @@
 package com.greenproject.classway.service;
 
 import com.greenproject.classway.dto.*;
-import com.greenproject.classway.entity.AccessTokenBlacklist;
-import com.greenproject.classway.entity.RefreshToken;
-import com.greenproject.classway.entity.Tutor;
-import com.greenproject.classway.entity.User;
+import com.greenproject.classway.entity.*;
 import com.greenproject.classway.exceptions.*;
+import com.greenproject.classway.global.FileStatus;
 import com.greenproject.classway.global.UserState;
-import com.greenproject.classway.repository.AccessTokenBlacklistRepository;
-import com.greenproject.classway.repository.RefreshTokenRepository;
-import com.greenproject.classway.repository.TutorRepository;
-import com.greenproject.classway.repository.UserRepository;
+import com.greenproject.classway.repository.*;
 import com.greenproject.classway.security.JwtTokenProvider;
 import com.greenproject.classway.service.file.FileStorageService;
 import jakarta.validation.Valid;
@@ -23,6 +18,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Date;
@@ -36,6 +32,7 @@ public class AuthService {
     private final TutorRepository tutorRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final AccessTokenBlacklistRepository accessTokenBlackListRepository;
+    private final TutorsCareerFileRepository tutorsCareerFileRepository;
     private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider tokenProvider;
     private final PasswordEncoder passwordEncoder;
@@ -48,6 +45,11 @@ public class AuthService {
         // 이메일이 사용 중인지 확인
         if (userRepository.existsByEmail(signupStudentRequest.getEmail())) {
             throw new ResourceConflictException("Email already exists");
+        }
+
+        // 닉네임이 사용 중인지 확인
+        if (userRepository.existsByNickname(signupStudentRequest.getNickname())) {
+            throw new ResourceConflictException("NickName already exists");
         }
 
         // 비밀번호 해싱
@@ -69,7 +71,9 @@ public class AuthService {
         }
 
         user.setRole(signupStudentRequest.getRole());
-        user.setClassAlarm(signupStudentRequest.getClass_alarm());
+        user.setClassContentAlarm(signupStudentRequest.getClass_content_alarm());
+        user.setQnaAlarm(signupStudentRequest.getQna_alarm());
+        user.setOfflineClassAlarm(signupStudentRequest.getOffline_class_alarm());
         user.setMarketingAgree(signupStudentRequest.getMarketing_agree());
 
         userRepository.save(user);
@@ -82,6 +86,11 @@ public class AuthService {
         // 이메일이 사용 중인지 확인
         if (userRepository.existsByEmail(signupTutorRequest.getEmail())) {
             throw new ResourceConflictException("Email already exists");
+        }
+
+        // 닉네임이 사용 중인지 확인
+        if (userRepository.existsByNickname(signupTutorRequest.getNickname())) {
+            throw new ResourceConflictException("NickName already exists");
         }
 
         // 비밀번호 해싱
@@ -103,7 +112,9 @@ public class AuthService {
         }
 
         user.setRole(signupTutorRequest.getRole());
-        user.setClassAlarm(signupTutorRequest.getClass_alarm());
+        user.setClassContentAlarm(signupTutorRequest.getClass_content_alarm());
+        user.setQnaAlarm(signupTutorRequest.getQna_alarm());
+        user.setOfflineClassAlarm(signupTutorRequest.getOffline_class_alarm());
         user.setMarketingAgree(signupTutorRequest.getMarketing_agree());
 
         userRepository.save(user);
@@ -122,12 +133,30 @@ public class AuthService {
         tutor.setIntro(signupTutorRequest.getIntro());
         tutor.setCareer(signupTutorRequest.getCareer());
 
-        List<String> documentFilePaths = fileStorageService.storeFiles(signupTutorRequest.getDocument_file());
-        for (String path : documentFilePaths) {
-            tutor.setDocumentUrl(path);
+        tutorRepository.save(tutor);
+
+        // TutorsCareerFile table save
+        Optional<Tutor> optionalTutor = tutorRepository.findByUserId(newUser.getId());
+
+        if (optionalTutor.isEmpty()) {
+            throw new ResourceNotFoundException("존재하지 않는 강사 입니다.");
         }
 
-        tutorRepository.save(tutor);
+        Tutor newTutor = optionalTutor.get();
+
+        List<String> documentFilePaths = fileStorageService.storeFiles(signupTutorRequest.getDocument_file());
+        for (String path : documentFilePaths) {
+            String normalizedPath = path.replace("\\", "/");
+            String savedFileName = normalizedPath.substring(normalizedPath.lastIndexOf('/') + 1);
+
+            TutorsCareerFile tutorsCareerFile = new TutorsCareerFile();
+            tutorsCareerFile.setTutor(newTutor);
+            tutorsCareerFile.setFileName(savedFileName);
+            tutorsCareerFile.setFileUrl(path);
+            tutorsCareerFile.setStatus(FileStatus.TEMP);
+
+            tutorsCareerFileRepository.save(tutorsCareerFile);
+        }
     }
 
     // 로그인

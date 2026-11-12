@@ -38,7 +38,7 @@ public class Tutor {
     private String rejectReason;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "approved_by", nullable = false)
+    @JoinColumn(name = "approved_by")
     private User approvedBy;
 
     @Column(name = "applied_at", nullable = false, insertable = false, updatable = false)
