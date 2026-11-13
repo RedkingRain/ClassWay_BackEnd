@@ -1,16 +1,11 @@
 package com.greenproject.classway.service;
 
 import com.greenproject.classway.dto.*;
-import com.greenproject.classway.entity.AccessTokenBlacklist;
-import com.greenproject.classway.entity.RefreshToken;
-import com.greenproject.classway.entity.Tutor;
-import com.greenproject.classway.entity.User;
+import com.greenproject.classway.entity.*;
 import com.greenproject.classway.exceptions.*;
+import com.greenproject.classway.global.FileStatus;
 import com.greenproject.classway.global.UserState;
-import com.greenproject.classway.repository.AccessTokenBlacklistRepository;
-import com.greenproject.classway.repository.RefreshTokenRepository;
-import com.greenproject.classway.repository.TutorRepository;
-import com.greenproject.classway.repository.UserRepository;
+import com.greenproject.classway.repository.*;
 import com.greenproject.classway.security.JwtTokenProvider;
 import com.greenproject.classway.service.file.FileStorageService;
 import jakarta.validation.Valid;
@@ -23,6 +18,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Date;
@@ -36,6 +32,7 @@ public class AuthService {
     private final TutorRepository tutorRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final AccessTokenBlacklistRepository accessTokenBlackListRepository;
+    private final TutorsCareerFileRepository tutorsCareerFileRepository;
     private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider tokenProvider;
     private final PasswordEncoder passwordEncoder;
@@ -50,6 +47,11 @@ public class AuthService {
             throw new ResourceConflictException("Email already exists");
         }
 
+        // 닉네임이 사용 중인지 확인
+        if (userRepository.existsByNickname(signupStudentRequest.getNickname())) {
+            throw new ResourceConflictException("NickName already exists");
+        }
+
         // 비밀번호 해싱
         String hashedPassword = passwordEncoder.encode(signupStudentRequest.getPassword());
 
@@ -59,8 +61,19 @@ public class AuthService {
         user.setPassword(hashedPassword);
         user.setName(signupStudentRequest.getName());
         user.setPhone(signupStudentRequest.getPhone());
+        user.setNickname(signupStudentRequest.getNickname());
+
+        // 1. 파일 저장 서비스 호출 (로컬이든 S3든 인터페이스를 통해 알아서 처리됨)
+        List<String> imageFilePaths = fileStorageService.storeFiles(signupStudentRequest.getProfile_image());
+        // 2. 반환받은 경로(URL) 리스트를 DB 엔티티에 매핑하여 저장
+        for (String path : imageFilePaths) {
+            user.setProfileImage(path);
+        }
+
         user.setRole(signupStudentRequest.getRole());
-        user.setClassAlarm(signupStudentRequest.getClass_alarm());
+        user.setClassContentAlarm(signupStudentRequest.getClass_content_alarm());
+        user.setQnaAlarm(signupStudentRequest.getQna_alarm());
+        user.setOfflineClassAlarm(signupStudentRequest.getOffline_class_alarm());
         user.setMarketingAgree(signupStudentRequest.getMarketing_agree());
 
         userRepository.save(user);
@@ -75,6 +88,11 @@ public class AuthService {
             throw new ResourceConflictException("Email already exists");
         }
 
+        // 닉네임이 사용 중인지 확인
+        if (userRepository.existsByNickname(signupTutorRequest.getNickname())) {
+            throw new ResourceConflictException("NickName already exists");
+        }
+
         // 비밀번호 해싱
         String hashedPassword = passwordEncoder.encode(signupTutorRequest.getPassword());
 
@@ -84,42 +102,61 @@ public class AuthService {
         user.setPassword(hashedPassword);
         user.setName(signupTutorRequest.getName());
         user.setPhone(signupTutorRequest.getPhone());
-        user.setRole(signupTutorRequest.getRole());
-        user.setClassAlarm(signupTutorRequest.getClass_alarm());
-        user.setMarketingAgree(signupTutorRequest.getMarketing_agree());
-
-        userRepository.save(user);
-
-        // tutor table save
-
-        Optional<User> optionalUser = userRepository.findById(signupTutorRequest.getApproved_by());
-
-        if (optionalUser.isEmpty()) {
-            throw new ResourceNotFoundException("존재하지 않는 계정 입니다.");
-        }
-
-        User admin = optionalUser.get();
-
-        Tutor tutor = new Tutor();
-        tutor.setUser(user);
-        tutor.setNickname(signupTutorRequest.getNickname());
-        tutor.setIntro(signupTutorRequest.getIntro());
-        tutor.setCareer(signupTutorRequest.getCareer());
-        tutor.setApprovedBy(admin);
+        user.setNickname(signupTutorRequest.getNickname());
 
         // 1. 파일 저장 서비스 호출 (로컬이든 S3든 인터페이스를 통해 알아서 처리됨)
         List<String> imageFilePaths = fileStorageService.storeFiles(signupTutorRequest.getProfile_image());
         // 2. 반환받은 경로(URL) 리스트를 DB 엔티티에 매핑하여 저장
         for (String path : imageFilePaths) {
-            tutor.setProfileImage(path);
+            user.setProfileImage(path);
         }
+
+        user.setRole(signupTutorRequest.getRole());
+        user.setClassContentAlarm(signupTutorRequest.getClass_content_alarm());
+        user.setQnaAlarm(signupTutorRequest.getQna_alarm());
+        user.setOfflineClassAlarm(signupTutorRequest.getOffline_class_alarm());
+        user.setMarketingAgree(signupTutorRequest.getMarketing_agree());
+
+        userRepository.save(user);
+
+        // tutor table save
+        Optional<User> optionalUser = userRepository.findByEmail(signupTutorRequest.getEmail());
+
+        if (optionalUser.isEmpty()) {
+            throw new ResourceNotFoundException("존재하지 않는 계정 입니다.");
+        }
+
+        User newUser = optionalUser.get();
+
+        Tutor tutor = new Tutor();
+        tutor.setUser(newUser);
+        tutor.setIntro(signupTutorRequest.getIntro());
+        tutor.setCareer(signupTutorRequest.getCareer());
+
+        tutorRepository.save(tutor);
+
+        // TutorsCareerFile table save
+        Optional<Tutor> optionalTutor = tutorRepository.findByUserId(newUser.getId());
+
+        if (optionalTutor.isEmpty()) {
+            throw new ResourceNotFoundException("존재하지 않는 강사 입니다.");
+        }
+
+        Tutor newTutor = optionalTutor.get();
 
         List<String> documentFilePaths = fileStorageService.storeFiles(signupTutorRequest.getDocument_file());
         for (String path : documentFilePaths) {
-            tutor.setDocumentUrl(path);
-        }
+            String normalizedPath = path.replace("\\", "/");
+            String savedFileName = normalizedPath.substring(normalizedPath.lastIndexOf('/') + 1);
 
-        tutorRepository.save(tutor);
+            TutorsCareerFile tutorsCareerFile = new TutorsCareerFile();
+            tutorsCareerFile.setTutor(newTutor);
+            tutorsCareerFile.setFileName(savedFileName);
+            tutorsCareerFile.setFileUrl(path);
+            tutorsCareerFile.setStatus(FileStatus.TEMP);
+
+            tutorsCareerFileRepository.save(tutorsCareerFile);
+        }
     }
 
     // 로그인

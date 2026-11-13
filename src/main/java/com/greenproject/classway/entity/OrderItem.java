@@ -34,10 +34,22 @@ public class OrderItem {
     @Column(nullable = false)
     private Integer price;
 
+    @Column(name = "point_discount")
+    private Integer pointDiscount;
+
+    @Column(name = "coupon_discount")
+    private Integer couponDiscount;
+
+    @Column(name = "final_item_price")
+    private Integer finalItemPrice;
+
     @Column(nullable = false)
     private Integer quantity = 1;
 
     @Column(nullable = false, length = 20)
     @Enumerated(EnumType.STRING)
     private OrderItemStatus status = OrderItemStatus.PAID;
+
+    @Column(name = "point_save")
+    private Integer pointSave;
 }

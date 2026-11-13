@@ -1,0 +1,10 @@
+package com.greenproject.classway.repository;
+
+import com.greenproject.classway.entity.EmailVerification;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.Optional;
+
+public interface EmailVerificationRepository extends JpaRepository<EmailVerification, Integer> {
+    Optional<EmailVerification> findTopByEmailOrderByCreatedAtDesc(String email);
+}

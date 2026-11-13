@@ -21,17 +21,11 @@ public class Tutor {
     @JoinColumn(name = "user_id", nullable = false, unique = true)
     private User user;
 
-    @Column(nullable = false, length = 50)
-    private String nickname;
-
     @Column(columnDefinition = "TEXT")
     private String intro;
 
     @Column(columnDefinition = "TEXT")
     private String career;
-
-    @Column(name = "profile_image", length = 255)
-    private String profileImage;
 
     @Column(name = "document_url", length = 255)
     private String documentUrl;
@@ -44,7 +38,7 @@ public class Tutor {
     private String rejectReason;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "approved_by", nullable = false)
+    @JoinColumn(name = "approved_by")
     private User approvedBy;
 
     @Column(name = "applied_at", nullable = false, insertable = false, updatable = false)

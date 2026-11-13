@@ -37,26 +37,30 @@ public class SignupTutorRequest {
     @Size(max = 13)
     private String phone;               // 휴대폰 번호
 
+    @NotBlank
+    private String nickname;	// 사용자 활동명
+
+    private List<MultipartFile> profile_image;	// 프로필 사진 주소
+
     @NotNull
     private UserRole role;	            //역할: STUDENT, TUTOR, ADMIN (강사는 승인 후 TUTOR)
 
     @NotNull
-    private Boolean class_alarm;	    // 수업 일정 알림 수신
+    private Boolean class_content_alarm;    // 클래스 신규 강의 컨텐츠 등록 알람 수신
+
+    @NotNull
+    private Boolean qna_alarm;              // 고객센터 1:1문의 및 강사 문의 답변 알림 수신
+
+    @NotNull
+    private Boolean offline_class_alarm;    // 오프라인 수업 일정 알림 수신
 
     @NotNull
     private Boolean marketing_agree;	// 마케팅 수신 동의 (선택 약관)
 
     //-------강사 전용 항목---------
-    @NotBlank
-    private String nickname;	// 강사 활동명
-
     private String intro;	// 강사 소개
 
     private String career;	// 경력 사항
 
-    private List<MultipartFile> profile_image;	// 프로필 사진 주소
-
     private List<MultipartFile> document_file;	// 증빙 파일 주소 (포트폴리오·경력증명서 1개)
-
-    private int approved_by;    // 처리한 관리자 (승인·반려)
 }
