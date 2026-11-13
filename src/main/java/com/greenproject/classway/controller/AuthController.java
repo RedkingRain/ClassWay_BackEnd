@@ -16,21 +16,21 @@ import lombok.AllArgsConstructor;
 public class AuthController {
     private final AuthService authService;
 
-    @Operation(summary = "회원가입 API", description = "회원가입")
+    @Operation(summary = "수강생 회원가입 API", description = "수강생의 회원가입 진행(password 기반)")
     @PostMapping("/signup/student")
     public ResponseEntity<ApiResponse<Void>> signupStudent(@Valid @ModelAttribute SignupStudentRequest signupStudentRequest) {
         authService.signupStudent(signupStudentRequest);
         return ResponseEntity.ok(ApiResponse.ok());
     }
 
-    @Operation(summary = "회원가입 API", description = "회원가입")
+    @Operation(summary = "강사 회원가입 API", description = "강사의 회원가입 진행(password 기반)")
     @PostMapping("/signup/tutor")
     public ResponseEntity<ApiResponse<Void>> signupTutor(@Valid @ModelAttribute SignupTutorRequest signupTutorRequest) {
         authService.signupTutor(signupTutorRequest);
         return ResponseEntity.ok(ApiResponse.ok());
     }
 
-    @Operation(summary = "로그인 API", description = "패스워드 기반 로그인")
+    @Operation(summary = "로그인 API", description = "password 기반 로그인")
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<LoginResponse>> login(
             @Valid @RequestBody LoginRequest loginRequest
@@ -72,5 +72,41 @@ public class AuthController {
         // 리프레시 토큰을 이용해 새로운 엑세스 토큰을 재발급 받는 API
         RefreshResponse response = authService.refresh(refreshRequest);
         return ResponseEntity.ok(ApiResponse.ok(response));
+    }
+
+    @Operation(summary = "닉네임 중복 확인 API", description = "닉네임이 이미 존재하는지 확인")
+    @PostMapping("/nickname_duplicate_check")
+    public ResponseEntity<ApiResponse<DuplicateCheckResponse>> checkNicknameDuplicate(
+            @Valid @RequestBody NicknameCheckRequest nicknameCheckRequest
+    ) {
+        authService.checkNicknameDuplicate(nicknameCheckRequest);
+        return ResponseEntity.ok(ApiResponse.ok());
+    }
+
+    @Operation(summary = "이메일 중복 확인 및 인증 API", description = "이메일이 존재하는지 확인 후 인증번호 메일 발송")
+    @PostMapping("/email_check")
+    public ResponseEntity<ApiResponse<Void>> checkEmail(
+            @Valid @RequestBody EmailCheckRequest emailCheckRequest
+    ) {
+        authService.checkEmail(emailCheckRequest);
+        return ResponseEntity.ok(ApiResponse.ok());
+    }
+
+    @Operation(summary = "이메일 인증코드 전송 API", description = "이메일 인증번호 메일 발송")
+    @PostMapping("/email_confirm_code_send")
+    public ResponseEntity<ApiResponse<Void>> checkConfirmEmail(
+            @Valid @RequestBody EmailCheckRequest emailCheckRequest
+    ) {
+        authService.sendVerificationEmail(emailCheckRequest.getEmail());
+        return ResponseEntity.ok(ApiResponse.ok());
+    }
+
+    @Operation(summary = "이메일 인증번호 확인 API", description = "발송된 이메일 인증번호 일치 여부 및 유효시간 검증")
+    @PostMapping("/email_code_check")
+    public ResponseEntity<ApiResponse<Void>> verifyEmailCode(
+            @Valid @RequestBody EmailVerifyRequest emailVerifyRequest
+    ) {
+        authService.verifyEmailCode(emailVerifyRequest);
+        return ResponseEntity.ok(ApiResponse.ok());
     }
 }

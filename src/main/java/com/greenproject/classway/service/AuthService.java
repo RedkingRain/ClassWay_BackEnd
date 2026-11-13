@@ -10,6 +10,8 @@ import com.greenproject.classway.security.JwtTokenProvider;
 import com.greenproject.classway.service.file.FileStorageService;
 import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.AuthenticationException;
@@ -24,6 +26,7 @@ import java.time.ZoneId;
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 @AllArgsConstructor
@@ -37,6 +40,8 @@ public class AuthService {
     private final JwtTokenProvider tokenProvider;
     private final PasswordEncoder passwordEncoder;
     private final FileStorageService fileStorageService; // 인터페이스 주입
+    private final EmailVerificationRepository emailVerificationRepository;
+    private final JavaMailSender mailSender;
 
     // 수강생 회원가입
     @Transactional
@@ -315,5 +320,73 @@ public class AuthService {
     @Transactional
     public void deleteUser() {
 
+    }
+
+    // 닉네임 중복 체크
+    @Transactional(readOnly = true)
+    public void checkNicknameDuplicate(NicknameCheckRequest nicknameCheckRequest) {
+        boolean exists = userRepository.existsByNickname(nicknameCheckRequest.getNickname());
+        if (exists) {
+            throw new ResourceConflictException("이미 사용 중인 닉네임입니다.");
+        }
+    }
+
+    // 이메일 중복 체크 및 인증번호 발송
+    @Transactional
+    public void checkEmail(EmailCheckRequest emailCheckRequest) {
+        // 1. DB에서 이미 존재하는 이메일인지 확인
+        boolean exists = userRepository.existsByEmail(emailCheckRequest.getEmail());
+
+        // 2. 존재한다면 에러 리턴
+        if (exists) {
+            throw new ResourceConflictException("이미 사용 중인 계정입니다.");
+        }
+
+        // 3. Google SMTP를 통한 인증번호 이메일 발송
+        sendVerificationEmail(emailCheckRequest.getEmail());
+    }
+
+    @Transactional
+    public void sendVerificationEmail(String toEmail) {
+        // 1. 6자리 인증번호 생성 (000000 ~ 999999)
+        String verificationCode = String.format("%06d", ThreadLocalRandom.current().nextInt(1000000));
+
+        // 2. DB에 인증 정보 저장 (만료시간: 현재 시점 기준 3분 뒤)
+        EmailVerification verification = new EmailVerification();
+        verification.setEmail(toEmail);
+        verification.setCode(verificationCode);
+        verification.setExpiresAt(LocalDateTime.now().plusMinutes(3));
+
+        emailVerificationRepository.save(verification);
+
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setTo(toEmail);
+        message.setSubject("[ClassWay] 회원가입 이메일 인증번호 안내");
+        message.setText("안녕하세요, ClassWay입니다.\n\n"
+                + "회원가입을 위한 이메일 인증번호는 아래와 같습니다.\n\n"
+                + "인증번호: [" + verificationCode + "]\n\n"
+                + "해당 인증번호는 발송 시점으로부터 3분간 유효합니다.\n"
+                + "감사합니다.");
+
+        mailSender.send(message);
+    }
+
+    // 이메일 인증번호 검증
+    @Transactional(readOnly = true)
+    public void verifyEmailCode(EmailVerifyRequest emailVerifyRequest) {
+        // 1. 해당 이메일로 발송된 가장 최신의 인증 정보 1건 조회 (id 내림차순)
+        EmailVerification verification = emailVerificationRepository
+                .findTopByEmailOrderByIdDesc(emailVerifyRequest.getEmail())
+                .orElseThrow(() -> new UnauthenticatedException("인증번호가 만료되었습니다. 재발송하여 인증해주십쇼."));
+
+        // 2. 인증번호 유효 시간(만료 여부) 확인
+        if (verification.getExpiresAt().isBefore(LocalDateTime.now())) {
+            throw new UnauthenticatedException("인증번호가 만료되었습니다. 재발송하여 인증해주십쇼.");
+        }
+
+        // 3. 인증번호 대조 확인
+        if (!verification.getCode().equals(emailVerifyRequest.getCode())) {
+            throw new UnauthenticatedException("인증번호가 일치하지 않습니다.");
+        }
     }
 }
