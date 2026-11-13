@@ -55,8 +55,17 @@ public class SecurityConfig {
                         .accessDeniedHandler(accessDeniedHandler)
             )
             .authorizeHttpRequests(auth -> auth
-                    // 로그인, 회원가입, 토큰 재발급 허용
-                    .requestMatchers("/auth/signup/student", "/auth/signup/tutor", "/auth/login", "/auth/refresh")
+                    // 로그인, 회원가입, 토큰 재발급, 중복확인 허용
+                    .requestMatchers(
+                            "/auth/signup/student",
+                            "/auth/signup/tutor",
+                            "/auth/login",
+                            "/auth/refresh",
+                            "/auth/nickname_duplicate_check",
+                            "/auth/email_check",
+                            "/auth/email_confirm_code_send",
+                            "/auth/email_code_check"
+                    )
                     .permitAll()
                     // Swagger URL 허용
                     .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**")
