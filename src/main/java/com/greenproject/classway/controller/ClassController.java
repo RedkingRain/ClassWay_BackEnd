@@ -13,6 +13,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import com.greenproject.classway.dto.ReviewListResponse;
+import org.springframework.web.bind.annotation.RequestParam;
+
 
 @Tag(name = "ClassWay 클래스 API", description = "클래스 상세 등 클래스 조회 API 모듈입니다.")
 @RestController
@@ -33,4 +36,18 @@ public class ClassController {
         ClassDetailResponse result = classService.getClassDetail(classId, loginEmail);
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
+
+    @Operation(summary = "수강평 목록 조회 API", description = "공개 클래스의 수강평 (숨김,삭제 제외), sort: latest(최신순) / rating(별점순)")
+    @GetMapping("/{classId}/reviews")
+    public ResponseEntity<ApiResponse<ReviewListResponse>> getReviews(
+            @PathVariable Integer classId,
+            @RequestParam(defaultValue = "latest") String sort,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "5") int size
+    ) {
+        ReviewListResponse result = classService.getReviews(classId, sort, page, size);
+        return ResponseEntity.ok(ApiResponse.ok(result));
+    }
 }
+
+

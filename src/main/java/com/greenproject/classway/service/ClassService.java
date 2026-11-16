@@ -19,6 +19,14 @@ import com.greenproject.classway.repository.ReservationRepository;
 import lombok.AllArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.greenproject.classway.dto.ReviewListResponse;
+import com.greenproject.classway.entity.Reservation;
+import com.greenproject.classway.entity.Review;
+import com.greenproject.classway.repository.ReviewRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -32,6 +40,10 @@ public class ClassService {
     private final LectureRepository lectureRepository;
     private final ClassScheduleRepository classScheduleRepository;
     private final ReservationRepository reservationRepository;
+    private final ReviewRepository reviewRepository;
+
+    // 수강평 한 번에 최대 몇 개까지 줄지 (size=100000 같은 요청 막기)
+    private static final int MAX_REVIEW_PAGE_SIZE = 20;
 
     // loginEmail: 로그인한 사람의 이메일 (비로그인이면 null)
     @Transactional(readOnly = true)
@@ -146,6 +158,57 @@ public class ClassService {
                 .isEnrolled(isEnrolled)
                 .tutor(tutorInfo)
                 .chapters(chapterInfos)
+                .build();
+    }
+
+    // 수강평 목록 (CLASS-001 수강평 탭)
+    // sort: latest(최신순) / rating(별점순), page: 0부터 시작, size: 한 번에 몇 개
+    @Transactional(readOnly = true)
+    public ReviewListResponse getReviews(Integer classId, String sort, int page, int size) {
+
+        // 1. 공개 클래스인지 확인 (상세와 같은 규칙)
+        if (classEntityRepository.findByClassIdAndStatus(classId, ClassStatus.PUBLISHED).isEmpty()) {
+            throw new ResourceNotFoundException("존재하지 않는 강의입니다.");
+        }
+
+        // 2. 정렬 — 정해둔 두 가지만 허용, 그 외 값은 최신순
+        //    요청 값을 그대로 정렬 칸 이름으로 쓰면 아무 칸으로나 정렬할 수 있어서 위험
+        Sort order;
+        if ("rating".equals(sort)) {
+            order = Sort.by(Sort.Order.desc("rating"), Sort.Order.desc("createdAt")); // 별점 같으면 최신순
+        } else {
+            order = Sort.by(Sort.Order.desc("createdAt"));
+        }
+
+        // 3. 페이지 번호 · 개수 범위 제한 (음수 · 너무 큰 값 막기)
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.min(Math.max(size, 1), MAX_REVIEW_PAGE_SIZE);
+        Pageable pageable = PageRequest.of(safePage, safeSize, order);
+
+        // 4. 조회 (숨김 · 삭제 제외)
+        Page<Review> reviewPage = reviewRepository
+                .findByReservation_Clazz_ClassIdAndIsHiddenFalseAndIsDeletedFalse(classId, pageable);
+
+        // 5. 화면용으로 옮겨 담기 — 작성자는 닉네임만
+        List<ReviewListResponse.ReviewItem> items = new ArrayList<>();
+        for (Review review : reviewPage.getContent()) {
+            Reservation reservation = review.getReservation();
+            ClassSchedule schedule = reservation.getSchedule(); // 온라인은 null
+
+            items.add(ReviewListResponse.ReviewItem.builder()
+                    .reviewId(review.getReservationId())
+                    .writerNickname(reservation.getUser().getNickname())
+                    .rating(review.getRating())
+                    .content(review.getContent())
+                    .attendedAt(schedule != null ? schedule.getStartAt() : null)
+                    .createdAt(review.getCreatedAt())
+                    .build());
+        }
+
+        return ReviewListResponse.builder()
+                .reviews(items)
+                .totalCount(reviewPage.getTotalElements()) // 숨김 · 삭제 뺀 전체 개수
+                .hasNext(reviewPage.hasNext())             // 다음 페이지 있는지
                 .build();
     }
 
