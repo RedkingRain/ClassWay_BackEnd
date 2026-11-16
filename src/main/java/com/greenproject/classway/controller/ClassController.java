@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "ClassWay 클래스 API", description = "클래스 상세 등 클래스 조회 API 모듈입니다.")
 @RestController
-@RequestMapping("/api/classes")
+@RequestMapping("/classes")
 @AllArgsConstructor
 public class ClassController {
     private final ClassService classService;
