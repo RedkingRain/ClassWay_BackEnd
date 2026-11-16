@@ -27,7 +27,11 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import com.greenproject.classway.dto.ScheduleResponse;
+import com.greenproject.classway.global.ScheduleStatus;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -210,6 +214,43 @@ public class ClassService {
                 .totalCount(reviewPage.getTotalElements()) // 숨김 · 삭제 뺀 전체 개수
                 .hasNext(reviewPage.hasNext())             // 다음 페이지 있는지
                 .build();
+    }
+
+    // 일정 목록 (CLASS-002 날짜 · 시간 선택)
+    @Transactional(readOnly = true)
+    public List<ScheduleResponse> getSchedules(Integer classId) {
+
+        // 1. 공개 클래스인지 확인
+        ClassEntity clazz = classEntityRepository.findByClassIdAndStatus(classId, ClassStatus.PUBLISHED)
+                .orElseThrow(() -> new ResourceNotFoundException("존재하지 않는 강의입니다."));
+
+        // 2. 온라인은 일정이 없음 → 빈 목록
+        if (clazz.getClassType() == ClassType.ONLINE) {
+            return List.of();
+        }
+
+        // 3. 지금 이후 시작하는 예약 가능 · 마감 일정 (취소 · 종료 제외)
+        List<ClassSchedule> schedules = classScheduleRepository.findUpcomingSchedules(
+                classId, LocalDateTime.now(), List.of(ScheduleStatus.OPEN, ScheduleStatus.FULL));
+
+        // 4. 화면용으로 옮겨 담기
+        DateTimeFormatter timeFormat = DateTimeFormatter.ofPattern("HH:mm:ss");
+        List<ScheduleResponse> result = new ArrayList<>();
+        for (ClassSchedule schedule : schedules) {
+            // 남은 자리 (예약 인원이 정원보다 많게 잘못 들어가 있어도 0 아래로는 안 내려가게)
+            int remainingSeats = Math.max(0, schedule.getCapacity() - schedule.getReservedCount());
+
+            result.add(ScheduleResponse.builder()
+                    .scheduleId(schedule.getScheduleId())
+                    .startAt(schedule.getStartAt())
+                    .runningTime(schedule.getRunningTime() != null
+                            ? schedule.getRunningTime().format(timeFormat)
+                            : null)
+                    .remainingSeats(remainingSeats)
+                    .status(schedule.getStatus().name())
+                    .build());
+        }
+        return result;
     }
 
     // 초 → 분 (반올림, 값이 없으면 0)
