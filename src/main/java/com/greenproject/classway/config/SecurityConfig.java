@@ -72,7 +72,7 @@ public class SecurityConfig {
                     .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**")
                     .permitAll()
                     // 비로그인도 볼 수 있는 클래스 조회 API (GET만 허용, 등록/수정/삭제는 로그인 필요)
-                    .requestMatchers(HttpMethod.GET, "/api/classes/**")
+                    .requestMatchers(HttpMethod.GET, "/classes/**")
                     .permitAll()
                     .anyRequest().authenticated() // 나머지 모든 요청은 인증 필요
             ).addFilterBefore(authenticationFilter, UsernamePasswordAuthenticationFilter.class);

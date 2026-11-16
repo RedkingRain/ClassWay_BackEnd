@@ -7,7 +7,7 @@ import lombok.Getter;
 import java.math.BigDecimal;
 import java.util.List;
 
-// 클래스 상세 API 응답 (GET /api/classes/{classId}) — CLASS-001 ~ 003
+// 클래스 상세 API 응답 (GET /classes/{classId}) — CLASS-001 ~ 003
 // 프론트 mocks/classDetailData.js와 같은 모양
 @Getter
 @Builder
