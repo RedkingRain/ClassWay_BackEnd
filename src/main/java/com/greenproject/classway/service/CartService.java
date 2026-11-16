@@ -10,6 +10,23 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.greenproject.classway.dto.CartAddRequest;
+import com.greenproject.classway.dto.CartAddResponse;
+import com.greenproject.classway.entity.CartItem;
+import com.greenproject.classway.entity.ClassEntity;
+import com.greenproject.classway.entity.ClassSchedule;
+import com.greenproject.classway.exceptions.InvalidStateException;
+import com.greenproject.classway.exceptions.ResourceConflictException;
+import com.greenproject.classway.global.ClassStatus;
+import com.greenproject.classway.global.ClassType;
+import com.greenproject.classway.global.ReservationStatus;
+import com.greenproject.classway.global.ScheduleStatus;
+import com.greenproject.classway.repository.ClassEntityRepository;
+import com.greenproject.classway.repository.ClassScheduleRepository;
+import com.greenproject.classway.repository.ReservationRepository;
+
+import java.time.LocalDateTime;
+import java.util.Optional;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -20,6 +37,9 @@ public class CartService {
 
     private final CartItemRepository cartItemRepository;
     private final UserRepository userRepository;
+    private final ClassEntityRepository classEntityRepository;
+    private final ClassScheduleRepository classScheduleRepository;
+    private final ReservationRepository reservationRepository;
 
     /**
      * 장바구니 목록 조회
@@ -106,5 +126,80 @@ public class CartService {
 
         // 5. 완성된 List 반환
         return cartResponseList;
+    }
+
+
+    /**
+     * 장바구니 담기 (CLASS-002)
+     * 회원은 로그인 토큰으로 확인, 가격은 받지 않음 (결제 때 서버가 DB 가격으로 계산)
+     */
+    @Transactional
+    public CartAddResponse addToCart(CartAddRequest request) {
+
+        // 1. 현재 접속자 (목록 조회와 같은 방식)
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("해당 사용자를 찾을 수 없습니다."));
+
+        // 2. 공개 클래스인지
+        Integer classId = request.getClassId();
+        ClassEntity clazz = classEntityRepository.findByClassIdAndStatus(classId, ClassStatus.PUBLISHED)
+                .orElseThrow(() -> new ResourceNotFoundException("존재하지 않는 강의입니다."));
+        boolean isOnline = clazz.getClassType() == ClassType.ONLINE;
+
+        // 3. 온라인: 이미 수강 중이면 거절 (중복 결제 방지, 상세의 isEnrolled와 같은 기준)
+        if (isOnline && reservationRepository.existsByUser_EmailAndClazz_ClassIdAndStatus(
+                email, classId, ReservationStatus.RESERVED)) {
+            throw new ResourceConflictException("이미 수강 중인 클래스입니다.");
+        }
+
+        // 4. 같은 클래스가 이미 장바구니에 있으면 새로 담지 않음 (클래스당 1줄)
+        Optional<CartItem> existing = cartItemRepository.findFirstByUser_IdAndClazz_ClassId(user.getId(), classId);
+        if (existing.isPresent()) {
+            return CartAddResponse.builder()
+                    .cartItemId(existing.get().getCartItemId())
+                    .alreadyInCart(true)
+                    .build();
+        }
+
+        // 5. 오프라인: 일정 · 인원 확인 (온라인은 일정 없음, 인원 1명 고정)
+        ClassSchedule schedule = null;
+        int quantity = 1;
+        if (!isOnline) {
+            if (request.getScheduleId() == null) {
+                throw new InvalidStateException("날짜와 시간을 선택해 주세요.");
+            }
+
+            // 다른 클래스의 일정 번호를 끼워 넣은 경우도 「없는 일정」으로 처리
+            schedule = classScheduleRepository.findById(request.getScheduleId())
+                    .filter((s) -> s.getClazz().getClassId().equals(classId))
+                    .orElseThrow(() -> new ResourceNotFoundException("존재하지 않는 일정입니다."));
+
+            // 예약 가능(OPEN)이고 아직 시작 전인지
+            if (schedule.getStatus() != ScheduleStatus.OPEN
+                    || !schedule.getStartAt().isAfter(LocalDateTime.now())) {
+                throw new InvalidStateException("마감된 일정입니다.");
+            }
+
+            // 남은 자리 = 정원 - 예약 인원 (상세 · 일정 API와 같은 기준)
+            quantity = request.getQuantity();
+            int remainingSeats = schedule.getCapacity() - schedule.getReservedCount();
+            if (quantity > remainingSeats) {
+                throw new InvalidStateException("남은 자리보다 인원이 많습니다.");
+            }
+        }
+
+        // 6. 장바구니에 저장
+        CartItem cartItem = new CartItem();
+        cartItem.setUser(user);
+        cartItem.setClazz(clazz);
+        cartItem.setSchedule(schedule);
+        cartItem.setQuantity(quantity);
+        CartItem saved = cartItemRepository.save(cartItem);
+
+        return CartAddResponse.builder()
+                .cartItemId(saved.getCartItemId())
+                .alreadyInCart(false)
+                .build();
     }
 }

@@ -10,6 +10,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import com.greenproject.classway.dto.CartAddRequest;
+import com.greenproject.classway.dto.CartAddResponse;
+import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 
 import java.util.List;
 
@@ -25,6 +30,16 @@ public class CartController {
     @GetMapping
     public ResponseEntity<ApiResponse<List<CartItemResponse>>> getCart() {
         List<CartItemResponse> result = cartService.getCartList();
+        return ResponseEntity.ok(ApiResponse.ok(result));
+    }
+
+
+    @Operation(summary = "장바구니 담기 API", description = "클래스(오프라인은 일정 · 인원 포함)를 장바구니에 담습니다. 같은 클래스가 이미 있으면 담지 않고 alreadyInCart: true")
+    @PostMapping
+    public ResponseEntity<ApiResponse<CartAddResponse>> addToCart(
+            @Valid @RequestBody CartAddRequest request
+    ) {
+        CartAddResponse result = cartService.addToCart(request);
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
 }
