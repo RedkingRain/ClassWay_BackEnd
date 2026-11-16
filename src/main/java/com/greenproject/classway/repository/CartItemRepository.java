@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface CartItemRepository extends JpaRepository<CartItem, Integer> {
@@ -88,4 +89,10 @@ public interface CartItemRepository extends JpaRepository<CartItem, Integer> {
         ORDER BY ci.cart_item_id DESC
     """, nativeQuery = true)
     List<CartItemRow> findCartItemsByUserId(@Param("userId") Integer userId);
+
+
+    /**
+     * 이 회원 장바구니에 같은 클래스가 이미 있는지 (클래스당 1줄)
+     */
+    Optional<CartItem> findFirstByUser_IdAndClazz_ClassId(Integer userId, Integer classId);
 }
