@@ -18,7 +18,7 @@ import java.util.Optional;
  */
 @Service                // Spring이 이 클래스를 직접 만들어서 관리 (Controller에 자동으로 넣어줄 수 있게 됨)
 @AllArgsConstructor     // 아래 final 필드를 모두 받는 생성자 자동 생성 → Spring이 필요한 객체를 넣어줌 (의존성 주입)
-public class MyPageService {
+public class UserService {
 
     private final UserRepository userRepository;    // users 테이블 조회용
     private final JwtTokenProvider tokenProvider;   // 토큰에서 사용자 정보를 꺼내는 도구
