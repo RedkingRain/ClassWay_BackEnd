@@ -76,7 +76,7 @@ public class CartService {
             boolean isAvailable = true;
             String disabledReason = null;
 
-            if (!"OPEN".equalsIgnoreCase(row.getClassStatus())) {
+            if (!"PUBLISHED".equalsIgnoreCase(row.getClassStatus())) {
                 isAvailable = false;
                 disabledReason = "현재 수강 신청이 불가능한 클래스입니다.";
             } else if (!isOnline) {
