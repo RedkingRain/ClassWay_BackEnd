@@ -2,6 +2,7 @@ package com.greenproject.classway.controller;
 
 import com.greenproject.classway.dto.ApiResponse;
 import com.greenproject.classway.dto.ClassDetailResponse;
+import com.greenproject.classway.dto.ScheduleResponse;
 import com.greenproject.classway.service.ClassService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -15,6 +16,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import com.greenproject.classway.dto.ReviewListResponse;
 import org.springframework.web.bind.annotation.RequestParam;
+
+import java.util.List;
 
 
 @Tag(name = "ClassWay 클래스 API", description = "클래스 상세 등 클래스 조회 API 모듈입니다.")
@@ -46,6 +49,13 @@ public class ClassController {
             @RequestParam(defaultValue = "5") int size
     ) {
         ReviewListResponse result = classService.getReviews(classId, sort, page, size);
+        return ResponseEntity.ok(ApiResponse.ok(result));
+    }
+
+    @Operation(summary = "일정 목록 조회 API", description = "오프라인 클래스의 예약 가능, 마감 일정 (지금 이후, 시작 빠른 순). 온라인은 빈 목록")
+    @GetMapping("/{classId}/schedules")
+    public ResponseEntity<ApiResponse<List<ScheduleResponse>>> getSchedules(@PathVariable Integer classId) {
+        List<ScheduleResponse> result = classService.getSchedules(classId);
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
 }

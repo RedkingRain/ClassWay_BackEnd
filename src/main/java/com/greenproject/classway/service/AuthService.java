@@ -167,6 +167,13 @@ public class AuthService {
     // 로그인
     @Transactional
     public LoginResponse login(LoginRequest loginRequest) {
+        // 1. 계정 존재하는건지 확인
+        Optional<User> optionalUser = userRepository.findByEmail(loginRequest.getEmail());
+
+        if (optionalUser.isEmpty()) {
+            throw new ResourceNotFoundException("존재하지 않는 계정 입니다.");
+        }
+
         try {
             authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(loginRequest.getEmail(), loginRequest.getPassword())
@@ -175,20 +182,13 @@ public class AuthService {
             throw new UnauthenticatedException("아이디 또는 비밀번호가 올바르지 않습니다.");
         }
 
-        // 1. 계정 존재하는건지 확인
-        Optional<User> optionalUser = userRepository.findByEmail(loginRequest.getEmail());
-
-        if (optionalUser.isEmpty()) {
-            throw new ResourceNotFoundException("존재하지 않는 계정 입니다.");
-        }
-
         User user = optionalUser.get();
 
         if (user.getStatus() == UserState.DISABLED) {
-            throw new ResourceNotFoundException("탈퇴된 회원입니다.");
+            throw new UnauthenticatedException("탈퇴된 회원입니다.");
         }
         else if (user.getStatus() == UserState.WITHDRAWN) {
-            throw new ResourceNotFoundException("휴면된 계정입니다.");
+            throw new UnauthenticatedException("휴면된 계정입니다.");
         }
 
         // 엑세스 토큰 발급
