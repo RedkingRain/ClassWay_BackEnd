@@ -33,17 +33,13 @@ public class PaymentService {
     private final PaymentRepository paymentRepository;
     private final ClassEntityRepository classEntityRepository;
     private final ClassScheduleRepository classScheduleRepository;
-
-    @Value("${spring.toss.client:test_ck_default}")
-    private String tossClientKey;
+    private final ReservationRepository reservationRepository;
+    private final CartItemRepository cartItemRepository;
 
     @Value("${spring.toss.secret:test_sk_default}")
     private String tossSecretKey;
 
-    /**
-     * [API 1] POST /payment/ready_order
-     * 클래스 상태/정원 체크 및 PENDING 주문/READY 결제 데이터 생성
-     */
+    // 클래스 상태/정원 체크 및 PENDING 주문/READY 결제 데이터 생성
     @Transactional
     public ReadyResponse readyOrder(ReadyRequest request) {
 
@@ -165,11 +161,8 @@ public class PaymentService {
                 .build();
     }
 
-    /**
-     * [API 2] POST /payment/orders_confirm
-     * 토스페이먼츠 결제 승인 요청 및 위·변조 검증
-     * 승인 실패 시에도 FAILED/ABORTED 상태를 DB에 저장하기 위해 noRollbackFor 설정
-     */
+    // 토스페이먼츠 결제 승인 요청 및 위·변조 검증
+    // 승인 실패 시에도 FAILED/ABORTED 상태를 DB에 저장하기 위해 noRollbackFor 설정
     @Transactional(noRollbackFor = InvalidStateException.class)
     public ConfirmResponse confirmOrder(ConfirmRequest request) {
 
@@ -182,7 +175,7 @@ public class PaymentService {
             throw new InvalidStateException("본인의 주문만 결제할 수 있습니다.");
         }
 
-        // [알고리즘 1단계 & 2-1단계] 금액 대조 및 위변조 검증
+        // 2. 금액 대조 및 위변조 검증
         if (!order.getFinalAmount().equals(request.getAmount())) {
             throw new InvalidStateException("결제 진행 정보가 일치하지 않습니다. 다시 시도해주세요.");
         }
@@ -190,7 +183,7 @@ public class PaymentService {
         Payment payment = paymentRepository.findByOrder(order)
                 .orElseThrow(() -> new InvalidStateException("결제 대기 정보가 존재하지 않습니다."));
 
-        // [알고리즘 2-2단계] 토스페이먼츠 결제 승인 API 호출
+        // 3. 토스페이먼츠 결제 승인 API 호출
         // Authorization Header: Basic Base64(WIDGET_SECRET_KEY + ":")
         String authValue = Base64.getEncoder().encodeToString((tossSecretKey + ":").getBytes(StandardCharsets.UTF_8));
         RestClient restClient = RestClient.create();
@@ -208,14 +201,17 @@ public class PaymentService {
                     .retrieve()
                     .body(TossApproveResponse.class);
 
-            // [알고리즘 3-1단계] 승인 성공: orders, order_items 상태값 'PAID'로 변경
+            // 4. 승인 성공: orders, order_items 상태값 'PAID'로 변경 후 저장
             order.setStatus(OrderStatus.PAID);
+            orderRepository.save(order);
+
             List<OrderItem> orderItems = orderItemRepository.findByOrder(order);
             for (OrderItem item : orderItems) {
                 item.setStatus(OrderItemStatus.PAID);
             }
+            orderItemRepository.saveAll(orderItems);
 
-            // [알고리즘 4-2단계] payments 상태값 'DONE', failReason = null, 나머지 항목 업데이트
+            // 5. payments 상태값 'DONE', failReason = null, 나머지 항목 업데이트 후 저장
             LocalDateTime approvedAt = (tossResponse != null && tossResponse.getApprovedAt() != null)
                     ? OffsetDateTime.parse(tossResponse.getApprovedAt()).toLocalDateTime()
                     : LocalDateTime.now();
@@ -228,8 +224,46 @@ public class PaymentService {
             if (tossResponse != null && tossResponse.getReceipt() != null) {
                 payment.setReceiptUrl(tossResponse.getReceipt().getUrl());
             }
+            paymentRepository.save(payment);
 
-            // 5단계: 프론트엔드로 성공 결과 반환
+            // 6. reservations 테이블 데이터 추가 & 오프라인 강의 시 class_schedules의 reserved_count 증가
+            List<Reservation> reservationsToSave = new ArrayList<>();
+            List<ClassEntity> purchasedClasses = new ArrayList<>();
+
+            for (OrderItem item : orderItems) {
+                // 6-1) Reservation 엔티티 생성
+                Reservation reservation = new Reservation();
+                reservation.setUser(order.getUser());
+                reservation.setClazz(item.getClazz());
+                reservation.setSchedule(item.getSchedule());
+                reservation.setOrderItem(item);
+                reservation.setStatus(ReservationStatus.RESERVED);
+                reservationsToSave.add(reservation);
+
+                purchasedClasses.add(item.getClazz());
+
+                // 6-2) 오프라인 강의일 경우 class_schedules의 reserved_count에 신청 인원 합산 후 저장
+                ClassSchedule schedule = item.getSchedule();
+                if (schedule != null) {
+                    int currentReserved = schedule.getReservedCount() != null ? schedule.getReservedCount() : 0;
+                    int updatedReserved = currentReserved + item.getQuantity();
+                    schedule.setReservedCount(updatedReserved);
+
+                    // 정원이 모두 찼다면 스케줄 상태를 FULL(마감)로 변경
+                    if (updatedReserved >= schedule.getCapacity()) {
+                        schedule.setStatus(ScheduleStatus.FULL);
+                    }
+                    classScheduleRepository.save(schedule);
+                }
+            }
+            reservationRepository.saveAll(reservationsToSave);
+
+            // 7. 장바구니에서 결제 완료된 항목 제거
+            if (!purchasedClasses.isEmpty()) {
+                cartItemRepository.deleteByUserAndClazzIn(order.getUser(), purchasedClasses);
+            }
+
+            // 8. 프론트엔드로 성공 결과 반환
             return ConfirmResponse.builder()
                     .orderNo(order.getOrderNo())
                     .paymentKey(request.getPaymentKey())
@@ -240,29 +274,30 @@ public class PaymentService {
                     .build();
 
         } catch (Exception e) {
-            // [알고리즘 3-2단계] 승인 실패: orders, order_items 상태값 'FAILED'로 변경
+            // 승인 실패: orders, order_items 상태값 'FAILED'로 변경 후 저장
             order.setStatus(OrderStatus.FAILED);
+            orderRepository.save(order);
+
             List<OrderItem> orderItems = orderItemRepository.findByOrder(order);
             for (OrderItem item : orderItems) {
                 item.setStatus(OrderItemStatus.FAILED);
             }
+            orderItemRepository.saveAll(orderItems);
 
-            // [알고리즘 4-1단계] payments 상태값 'ABORTED', 실패 사유 입력 (255자 초과 방어)
+            // payments 상태값 'ABORTED', 실패 사유 입력 (255자 초과 방어) 후 저장
             String rawReason = e.getMessage() != null ? e.getMessage() : "결제 승인 실패";
             String safeReason = rawReason.length() > 250 ? rawReason.substring(0, 250) : rawReason;
 
             payment.setPaymentKey(request.getPaymentKey());
             payment.setStatus(PaymentStatus.ABORTED);
             payment.setFailReason(safeReason);
+            paymentRepository.save(payment);
 
             throw new InvalidStateException("토스페이먼츠 결제 승인에 실패하였습니다: " + safeReason);
         }
     }
 
-    /**
-     * [API 3] POST /payment/cancel_order
-     * 사용자가 결제창을 닫거나 취소했을 때 PENDING/READY 상태의 임시 주문 데이터 즉시 정리
-     */
+    // 사용자가 결제창을 닫거나 취소했을 때 PENDING/READY 상태의 임시 주문 데이터 즉시 정리
     @Transactional
     public void cancelPendingOrder(CancelPendingRequest request) {
         // 1. 현재 접속자 확인 (JWT)
