@@ -165,7 +165,7 @@ public class AuthService {
     }
 
     // 로그인
-    @Transactional
+    @Transactional(noRollbackFor = UnauthenticatedException.class)
     public LoginResponse login(LoginRequest loginRequest) {
         // 1. 계정 존재하는건지 확인
         Optional<User> optionalUser = userRepository.findByEmail(loginRequest.getEmail());
@@ -174,21 +174,51 @@ public class AuthService {
             throw new ResourceNotFoundException("존재하지 않는 계정 입니다.");
         }
 
+        User user = optionalUser.get();
+
+        // 2. 계정 상태(탈퇴/휴면) 선행 검증
+        if (user.getStatus() == UserState.DISABLED) {
+            throw new UnauthenticatedException("탈퇴된 회원입니다.");
+        } else if (user.getStatus() == UserState.WITHDRAWN) {
+            throw new UnauthenticatedException("휴면된 계정입니다.");
+        }
+
+        // 3. 계정 잠금 상태(locked_until) 검증
+        LocalDateTime now = LocalDateTime.now();
+        if (user.getLockedUntil() != null) {
+            if (user.getLockedUntil().isAfter(now)) {
+                throw new UnauthenticatedException("로그인 시도 횟수를 초과 했습니다. 잠시 후 다시 시도해주세요.");
+            } else {
+                // 잠금 시간이 경과한 경우 실패 횟수 및 잠금 시간 초기화
+                user.setLoginFailCount(0);
+                user.setLockedUntil(null);
+            }
+        }
+
+        // 4. ID 및 Password 일치 여부 검증
         try {
             authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(loginRequest.getEmail(), loginRequest.getPassword())
             );
         } catch (AuthenticationException e) {
+            int failCount = (user.getLoginFailCount() == null ? 0 : user.getLoginFailCount()) + 1;
+            user.setLoginFailCount(failCount);
+
+            if (failCount >= 5) {
+                user.setLockedUntil(LocalDateTime.now().plusMinutes(10));
+                userRepository.save(user);
+                throw new UnauthenticatedException("로그인 시도 횟수를 초과 했습니다. 잠시 후 다시 시도해주세요.");
+            }
+
+            userRepository.save(user);
             throw new UnauthenticatedException("아이디 또는 비밀번호가 올바르지 않습니다.");
         }
 
-        User user = optionalUser.get();
-
-        if (user.getStatus() == UserState.DISABLED) {
-            throw new UnauthenticatedException("탈퇴된 회원입니다.");
-        }
-        else if (user.getStatus() == UserState.WITHDRAWN) {
-            throw new UnauthenticatedException("휴면된 계정입니다.");
+        // 5. 로그인 성공 시 실패 횟수 및 잠금 시간 초기화
+        if (user.getLoginFailCount() != null && user.getLoginFailCount() > 0 || user.getLockedUntil() != null) {
+            user.setLoginFailCount(0);
+            user.setLockedUntil(null);
+            userRepository.save(user);
         }
 
         // 엑세스 토큰 발급
@@ -367,9 +397,9 @@ public class AuthService {
 
         SimpleMailMessage message = new SimpleMailMessage();
         message.setTo(toEmail);
-        message.setSubject("[ClassWay] 회원가입 이메일 인증번호 안내");
+        message.setSubject("[ClassWay] 이메일 인증번호 안내");
         message.setText("안녕하세요, ClassWay입니다.\n\n"
-                + "회원가입을 위한 이메일 인증번호는 아래와 같습니다.\n\n"
+                + "이메일 인증번호는 아래와 같습니다.\n\n"
                 + "인증번호: [" + verificationCode + "]\n\n"
                 + "해당 인증번호는 발송 시점으로부터 3분간 유효합니다.\n"
                 + "감사합니다.");
