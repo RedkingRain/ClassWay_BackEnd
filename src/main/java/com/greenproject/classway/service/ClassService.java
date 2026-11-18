@@ -59,6 +59,9 @@ public class ClassService {
     // 메인 인기 클래스 개수 (TOP 10)
     private static final int POPULAR_CLASS_COUNT = 10;
 
+    // 메인 이벤트 클래스 최대 개수 (2줄 × 4개)
+    private static final int EVENT_CLASS_COUNT = 8;
+
     // 수강평 한 번에 최대 몇 개까지 줄지 (size=100000 같은 요청 막기)
     private static final int MAX_REVIEW_PAGE_SIZE = 20;
 
@@ -320,25 +323,53 @@ public class ClassService {
             return List.of();
         }
 
-        // 5. 클래스 한 번에 꺼내기 (순서 섞여 있음)
-        List<ClassEntity> classes = classEntityRepository.findByClassIdIn(popularIds);
+        // 5~7. 순위 순서대로 카드 만들기
+        return toCardsInOrder(popularIds);
+    }
 
-        // 6-1. 「번호 → 클래스」 표 만들기
+    // 이벤트 중인 클래스 (MAIN-003): 노출 켜짐 + 지금이 노출 기간 안, 공개 클래스만, 최대 8개
+    @Transactional(readOnly = true)
+    public List<ClassCardResponse> getEventClasses() {
+
+        // 1~2. 개수 제한 주문서 (첫 페이지에서 8개)
+        Pageable top = PageRequest.of(0, EVENT_CLASS_COUNT);
+
+        // 3. 이벤트 중인 클래스 번호 (마감 임박순)
+        List<Integer> eventClassIds = classEventRepository.findEventClassIds(
+                LocalDateTime.now(), ClassStatus.PUBLISHED, top);
+
+        // 4. 비어 있으면 바로 끝
+        if (eventClassIds.isEmpty()) {
+            return List.of();
+        }
+
+        // 5~7. 번호 순서대로 카드 만들기
+        return toCardsInOrder(eventClassIds);
+    }
+
+    // 번호 목록 순서 그대로 카드 만들기 (인기 / 이벤트에서 같이 사용)
+    // findByClassIdIn은 순서를 지켜주지 않아서, 표로 만든 뒤 번호 순서대로 다시 담음
+    private List<ClassCardResponse> toCardsInOrder(List<Integer> classIds) {
+
+        // 1. 클래스 한 번에 꺼내기 (순서 섞여 있음)
+        List<ClassEntity> classes = classEntityRepository.findByClassIdIn(classIds);
+
+        // 2. 「번호 → 클래스」 표 만들기
         Map<Integer, ClassEntity> classById = new HashMap<>();
-        for (ClassEntity clazz : classes ) {
+        for (ClassEntity clazz : classes) {
             classById.put(clazz.getClassId(), clazz);
         }
 
-        // 6-2. 순위 목록을 앞에서부터 돌면서 표에서 꺼내 담기 → 순위 순서 회복
+        // 3. 번호 목록을 앞에서부터 돌면서 표에서 꺼내 담기 → 순서 회복
         List<ClassEntity> sorted = new ArrayList<>();
-        for (Integer id : popularIds ) {
+        for (Integer id : classIds) {
             ClassEntity clazz = classById.get(id);
             if (clazz != null) {          // 조회 사이에 지워진 클래스 대비
                 sorted.add(clazz);
             }
         }
 
-        // 7. 카드 만들기 (기존 toCards 재사용)
+        // 4. 카드 만들기
         return toCards(sorted);
     }
 

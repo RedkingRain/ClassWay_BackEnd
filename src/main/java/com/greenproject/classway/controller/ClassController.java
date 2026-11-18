@@ -73,6 +73,13 @@ public class ClassController {
         List<ClassCardResponse> result = classService.getPopularClasses();
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
+
+    @Operation(summary = "이벤트 클래스 조회 API", description = "노출 중인 이벤트 배지가 있는 공개 클래스 (마감 임박순, 최대 8개)")
+    @GetMapping("/events")
+    public ResponseEntity<ApiResponse<List<ClassCardResponse>>> getEventClasses() {
+        List<ClassCardResponse> result = classService.getEventClasses();
+        return ResponseEntity.ok(ApiResponse.ok(result));
+    }
 }
 
 
