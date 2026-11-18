@@ -29,7 +29,13 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import com.greenproject.classway.dto.ScheduleResponse;
 import com.greenproject.classway.global.ScheduleStatus;
+import com.greenproject.classway.dto.ClassCardResponse;
+import com.greenproject.classway.dto.ClassListResponse;
+import com.greenproject.classway.entity.ClassEvent;
+import com.greenproject.classway.repository.ClassEventRepository;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -45,6 +51,10 @@ public class ClassService {
     private final ClassScheduleRepository classScheduleRepository;
     private final ReservationRepository reservationRepository;
     private final ReviewRepository reviewRepository;
+    private final ClassEventRepository classEventRepository;
+
+    // 클래스 목록 한 번에 최대 몇 개까지 줄지
+    private static final int MAX_CLASS_PAGE_SIZE = 20;
 
     // 수강평 한 번에 최대 몇 개까지 줄지 (size=100000 같은 요청 막기)
     private static final int MAX_REVIEW_PAGE_SIZE = 20;
@@ -251,6 +261,94 @@ public class ClassService {
                     .build());
         }
         return result;
+    }
+
+    // 공개 클래스 목록 (MAIN-003 전체 클래스, 나중에 MAIN-002 검색에도 사용)
+    // classType: ONLINE / OFFLINE (그 외 값이나 없으면 전체)
+    @Transactional(readOnly = true)
+    public ClassListResponse getClasses(String classType, int page, int size) {
+
+        // 1. 값 보정
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.min(Math.max(size, 1), MAX_CLASS_PAGE_SIZE);
+
+
+        // 2. 페이지 주문서 ─ 최신 등록순 = classId 큰 순(내림차순)
+        Sort order = Sort.by(Sort.Order.desc("classId"));
+        Pageable pageable = PageRequest.of(safePage, safeSize, order);
+
+
+        // 3. 클래스 목록 꺼내기
+        //    classType이 "ONLINE"이면 ONLINE만, "OFFLINE"이면 OFFLINE만, 그 외는 전체
+        Page<ClassEntity> classPage;
+        if ("ONLINE".equals(classType)) {
+            classPage = classEntityRepository.findByStatusAndClassType(ClassStatus.PUBLISHED, ClassType.ONLINE, pageable);
+        } else if ("OFFLINE".equals(classType)) {
+            classPage = classEntityRepository.findByStatusAndClassType(ClassStatus.PUBLISHED, ClassType.OFFLINE, pageable);
+        } else {
+            classPage = classEntityRepository.findByStatus(ClassStatus.PUBLISHED, pageable);
+        }
+        List<ClassEntity> classes = classPage.getContent();
+
+        // 4. 이번 페이지 클래스 번호 모으기
+        List<Integer> classIds = new ArrayList<>();
+        for (ClassEntity clazz : classes) {
+            classIds.add(clazz.getClassId());
+        }
+
+        // 5. 강의 시간 합계 → 「번호 → 합계(초)」 표
+        Map<Integer, Long> secondsByClassId = new HashMap<>();
+        // 6. 노출 중인 이벤트 배지 → 「번호 → 배지 문구」 표
+        Map<Integer, String> labelByClassId = new HashMap<>();
+
+        // 목록이 비어 있으면 IN ( ) 조회를 할 필요가 없음
+        if (!classIds.isEmpty()) {
+            for (LectureRepository.ClassDurationRow row : lectureRepository.sumDurationByClassIds(classIds)) {
+                secondsByClassId.put(row.getClassId(), row.getTotalSeconds());
+            }
+            for (ClassEvent event : classEventRepository.findActiveEvents(classIds, LocalDateTime.now())) {
+                labelByClassId.put(event.getClazz().getClassId(), event.getLabel());
+            }
+        }
+
+        // 7. 카드 만들기
+        List<ClassCardResponse> cards = new ArrayList<>();
+        for (ClassEntity clazz : classes) {
+            Integer price = clazz.getPrice();
+            Integer salePrice = clazz.getSalePrice();
+            int discountRate = 0;
+            if (salePrice != null && salePrice < price) {
+                discountRate = (price - salePrice) * 100 / price;
+            }
+
+            // 표에서 내 번호로 꺼내기 (없으면 0초)
+            Long seconds = secondsByClassId.getOrDefault(clazz.getClassId(), 0L);
+
+            cards.add(ClassCardResponse.builder()
+                    .classId(clazz.getClassId())
+                    .title(clazz.getTitle())
+                    .thumbnailUrl(clazz.getThumbnailUrl())
+                    .classType(clazz.getClassType().name())
+                    .categoryId(clazz.getCategory().getCategoryId())
+                    .categoryName(clazz.getCategory().getName())
+                    .price(price)
+                    .salePrice(salePrice)
+                    .discountRate(discountRate)
+                    .avgRating(clazz.getAvgRating())
+                    .reviewCount(clazz.getReviewCount())
+                    .wishCount(clazz.getWishCount())
+                    .totalDurationMinutes(toMinutes(seconds.intValue()))
+                    .tutorNickname(clazz.getTutor().getUser().getNickname())
+                    .eventLabel(labelByClassId.get(clazz.getClassId())) // 없으면 null
+                    .build());
+        }
+
+        // 8. 응답
+        return ClassListResponse.builder()
+                .classes(cards) // 카드 목록
+                .totalCount(classPage.getTotalElements()) // 숨김 · 삭제 뺀 전체 개수
+                .totalPages(classPage.getTotalPages()) // 전체 페이지 수
+                .build();
     }
 
     // 초 → 분 (반올림, 값이 없으면 0)
