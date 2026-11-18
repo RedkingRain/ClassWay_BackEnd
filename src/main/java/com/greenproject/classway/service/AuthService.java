@@ -305,8 +305,14 @@ public class AuthService {
         String name = user.getName();
         String email = user.getEmail();
 
-        // 3. MyInfoResponse 객체를 생성하여 돌려줌
-        return new MyInfoResponse(userId, email, name, user.getRole().name());
+        // 3. 강사 신청 상태 (강사 신청을 안 한 회원은 null)
+        //    강사는 가입 때부터 role이 TUTOR라서, 승인 대기 / 반려 / 승인을 구분하려면 필요
+        String tutorStatus = tutorRepository.findByUserId(userId)
+                .map((tutor) -> tutor.getApprovalStatus().name())
+                .orElse(null);
+
+        // 4. MyInfoResponse 객체를 생성하여 돌려줌
+        return new MyInfoResponse(userId, email, name, user.getRole().name(), user.getNickname(), tutorStatus);
 
     }
 
