@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.greenproject.classway.dto.CartAddRequest;
 import com.greenproject.classway.dto.CartAddResponse;
+import com.greenproject.classway.dto.CartDeleteRequest;
 import com.greenproject.classway.entity.CartItem;
 import com.greenproject.classway.entity.ClassEntity;
 import com.greenproject.classway.entity.ClassSchedule;
@@ -76,7 +77,7 @@ public class CartService {
             boolean isAvailable = true;
             String disabledReason = null;
 
-            if (!"OPEN".equalsIgnoreCase(row.getClassStatus())) {
+            if (!"PUBLISHED".equalsIgnoreCase(row.getClassStatus())) {
                 isAvailable = false;
                 disabledReason = "현재 수강 신청이 불가능한 클래스입니다.";
             } else if (!isOnline) {
@@ -201,5 +202,19 @@ public class CartService {
                 .cartItemId(saved.getCartItemId())
                 .alreadyInCart(false)
                 .build();
+    }
+
+    /**
+     * 장바구니 선택(및 개별) 항목 삭제
+     */
+    @Transactional
+    public void deleteCartItems(CartDeleteRequest request) {
+        // 1. 현재 접속자 확인 (JWT 토큰 기반)
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("해당 사용자를 찾을 수 없습니다."));
+
+        // 2. 본인 소유의 장바구니 항목들만 일괄 삭제
+        cartItemRepository.deleteByUserAndCartItemIdIn(user, request.getCartItemIds());
     }
 }
