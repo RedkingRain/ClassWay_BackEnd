@@ -56,14 +56,15 @@ public class ClassController {
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
-    @Operation(summary = "클래스 목록 조회 API", description = "공개 클래스 목록 (최신 등록순), classType: ONLINE / OFFLINE / 없으면 전체")
+    @Operation(summary = "클래스 목록 조회 API", description = "공개 클래스 목록, classType: ONLINE / OFFLINE / 없으면 전체, sort: random(랜덤) / 없으면 최신 등록순")
     @GetMapping
     public ResponseEntity<ApiResponse<ClassListResponse>> getClasses(
             @RequestParam(required = false) String classType,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "12") int size
+            @RequestParam(defaultValue = "12") int size,
+            @RequestParam(defaultValue = "latest") String sort
     ) {
-        ClassListResponse result = classService.getClasses(classType, page, size);
+        ClassListResponse result = classService.getClasses(classType, page, size, sort);
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
 

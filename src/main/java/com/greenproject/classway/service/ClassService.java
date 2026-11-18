@@ -35,6 +35,7 @@ import com.greenproject.classway.entity.ClassEvent;
 import com.greenproject.classway.repository.ClassEventRepository;
 
 import java.util.HashMap;
+import java.util.Collections;
 import java.util.Map;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -271,12 +272,18 @@ public class ClassService {
 
     // 공개 클래스 목록 (MAIN-003 전체 클래스, 나중에 MAIN-002 검색에도 사용)
     // classType: ONLINE / OFFLINE (그 외 값이나 없으면 전체)
+    // sort: random(랜덤, 메인 전체 클래스) / 그 외는 최신 등록순
     @Transactional(readOnly = true)
-    public ClassListResponse getClasses(String classType, int page, int size) {
+    public ClassListResponse getClasses(String classType, int page, int size, String sort) {
 
         // 1. 값 보정
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), MAX_CLASS_PAGE_SIZE);
+
+        // 랜덤이면 따로 처리 (페이지 개념 없음)
+        if ("random".equals(sort)) {
+            return getRandomClasses(classType, safeSize);
+        }
 
         // 2. 페이지 주문서 ─ 최신 등록순 = classId 큰 순(내림차순)
         Sort order = Sort.by(Sort.Order.desc("classId"));
@@ -301,6 +308,38 @@ public class ClassService {
                 .classes(cards) // 카드 목록
                 .totalCount(classPage.getTotalElements()) // 조건에 맞는 공개 클래스
                 .totalPages(classPage.getTotalPages()) // 전체 페이지 수
+                .build();
+    }
+
+    // 전체 클래스 랜덤 (MAIN-003): 공개 클래스 번호를 전부 꺼내 섞은 뒤 앞에서 size개
+    // 번호만 꺼내서 섞기 때문에 가볍고, 카드는 섞은 순서 그대로 만듦
+    private ClassListResponse getRandomClasses(String classType, int size) {
+
+        // 1. classType에 맞는 공개 클래스 번호 전부
+        List<Integer> ids;
+        if ("ONLINE".equals(classType)) {
+            ids = classEntityRepository.findIdsByStatusAndClassType(ClassStatus.PUBLISHED, ClassType.ONLINE);
+        } else if ("OFFLINE".equals(classType)) {
+            ids = classEntityRepository.findIdsByStatusAndClassType(ClassStatus.PUBLISHED, ClassType.OFFLINE);
+        } else {
+            ids = classEntityRepository.findIdsByStatus(ClassStatus.PUBLISHED);
+        }
+
+        // 2. 복사해서 섞기 (조회 결과를 직접 섞지 않고 새 목록에)
+        List<Integer> shuffled = new ArrayList<>(ids);
+        Collections.shuffle(shuffled);
+
+        // 3. 앞에서 size개만 (전체가 더 적으면 있는 만큼)
+        List<Integer> picked = shuffled.subList(0, Math.min(size, shuffled.size()));
+
+        // 4. 카드 만들기 (번호가 없으면 조회하지 않음)
+        List<ClassCardResponse> cards = picked.isEmpty() ? List.of() : toCardsInOrder(picked);
+
+        // 5. 응답 (랜덤은 페이지 1개)
+        return ClassListResponse.builder()
+                .classes(cards)
+                .totalCount((long) ids.size()) // 조건에 맞는 공개 클래스 전체 개수
+                .totalPages(1)
                 .build();
     }
 
