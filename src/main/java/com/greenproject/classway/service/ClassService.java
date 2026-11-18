@@ -56,6 +56,9 @@ public class ClassService {
     // 클래스 목록 한 번에 최대 몇 개까지 줄지
     private static final int MAX_CLASS_PAGE_SIZE = 20;
 
+    // 메인 인기 클래스 개수 (TOP 10)
+    private static final int POPULAR_CLASS_COUNT = 10;
+
     // 수강평 한 번에 최대 몇 개까지 줄지 (size=100000 같은 요청 막기)
     private static final int MAX_REVIEW_PAGE_SIZE = 20;
 
@@ -272,11 +275,9 @@ public class ClassService {
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), MAX_CLASS_PAGE_SIZE);
 
-
         // 2. 페이지 주문서 ─ 최신 등록순 = classId 큰 순(내림차순)
         Sort order = Sort.by(Sort.Order.desc("classId"));
         Pageable pageable = PageRequest.of(safePage, safeSize, order);
-
 
         // 3. 클래스 목록 꺼내기
         //    classType이 "ONLINE"이면 ONLINE만, "OFFLINE"이면 OFFLINE만, 그 외는 전체
@@ -295,9 +296,50 @@ public class ClassService {
         // 8. 응답
         return ClassListResponse.builder()
                 .classes(cards) // 카드 목록
-                .totalCount(classPage.getTotalElements()) // 숨김 · 삭제 뺀 전체 개수
+                .totalCount(classPage.getTotalElements()) // 조건에 맞는 공개 클래스
                 .totalPages(classPage.getTotalPages()) // 전체 페이지 수
                 .build();
+    }
+
+    // 인기 클래스 (MAIN-003): 최근 30일 예약 수 TOP 10, 취소 제외, 공개 클래스만
+    @Transactional(readOnly = true)
+    public List<ClassCardResponse> getPopularClasses() {
+
+        // 1. 기준 시각 = 지금 - 30일
+        LocalDateTime since = LocalDateTime.now().minusDays(30);
+
+        // 2. 개수 제한 주문서 (첫 페이지에서 10개)
+        Pageable top = PageRequest.of(0, POPULAR_CLASS_COUNT);
+
+        // 3. 인기 클래스 번호 (순위 순서)  예: [1, 6, 4, 9, 5, 2, 13]
+        List<Integer> popularIds = reservationRepository.findPopularClassIds(
+                since, ReservationStatus.CANCELED, ClassStatus.PUBLISHED, top);
+
+        // 4. 비어 있으면 바로 끝 (최근 30일 예약이 없을 때)
+        if (popularIds.isEmpty()) {
+            return List.of();
+        }
+
+        // 5. 클래스 한 번에 꺼내기 (순서 섞여 있음)
+        List<ClassEntity> classes = classEntityRepository.findByClassIdIn(popularIds);
+
+        // 6-1. 「번호 → 클래스」 표 만들기
+        Map<Integer, ClassEntity> classById = new HashMap<>();
+        for (ClassEntity clazz : classes ) {
+            classById.put(clazz.getClassId(), clazz);
+        }
+
+        // 6-2. 순위 목록을 앞에서부터 돌면서 표에서 꺼내 담기 → 순위 순서 회복
+        List<ClassEntity> sorted = new ArrayList<>();
+        for (Integer id : popularIds ) {
+            ClassEntity clazz = classById.get(id);
+            if (clazz != null) {          // 조회 사이에 지워진 클래스 대비
+                sorted.add(clazz);
+            }
+        }
+
+        // 7. 카드 만들기 (기존 toCards 재사용)
+        return toCards(sorted);
     }
 
     // 클래스 목록 -> 카드 목록 ( 전체/인기/이벤트 에서 같이 사용 )

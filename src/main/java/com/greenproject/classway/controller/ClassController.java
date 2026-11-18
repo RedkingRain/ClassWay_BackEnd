@@ -66,6 +66,13 @@ public class ClassController {
         ClassListResponse result = classService.getClasses(classType, page, size);
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
+
+    @Operation(summary = "인기 클래스 조회 API", description = "최근 30일 예약 수 TOP 10 (취소 제외, 공개 클래스만)")
+    @GetMapping("/popular")
+    public ResponseEntity<ApiResponse<List<ClassCardResponse>>> getPopularClasses() {
+        List<ClassCardResponse> result = classService.getPopularClasses();
+        return ResponseEntity.ok(ApiResponse.ok(result));
+    }
 }
 
 

@@ -8,6 +8,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface ClassEntityRepository extends JpaRepository<ClassEntity, Integer> {
@@ -24,4 +25,8 @@ public interface ClassEntityRepository extends JpaRepository<ClassEntity, Intege
     // 공개 클래스 목록 ( 온라인/오프라인 탭 )
     @EntityGraph(attributePaths = {"category", "tutor", "tutor.user"})
     Page<ClassEntity> findByStatusAndClassType(ClassStatus classStatus, ClassType classType, Pageable pageable);
+
+    // 번호 목록에 있는 클래스 한 번에 (카테고리,강사 같이) — 순서는 보장 안 됨
+    @EntityGraph(attributePaths = {"category", "tutor", "tutor.user"})
+    List<ClassEntity> findByClassIdIn(List<Integer> classIds);
 }
