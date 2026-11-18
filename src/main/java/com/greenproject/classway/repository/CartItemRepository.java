@@ -1,6 +1,8 @@
 package com.greenproject.classway.repository;
 
 import com.greenproject.classway.entity.CartItem;
+import com.greenproject.classway.entity.ClassEntity;
+import com.greenproject.classway.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -95,4 +97,14 @@ public interface CartItemRepository extends JpaRepository<CartItem, Integer> {
      * 이 회원 장바구니에 같은 클래스가 이미 있는지 (클래스당 1줄)
      */
     Optional<CartItem> findFirstByUser_IdAndClazz_ClassId(Integer userId, Integer classId);
+
+    /**
+     * 결제 완료된 클래스들을 해당 회원의 장바구니에서 일괄 제거
+     */
+    void deleteByUserAndClazzIn(User user, List<ClassEntity> classes);
+
+    /**
+     * 회원이 선택한 장바구니 항목들을 일괄 삭제 (본인 소유 장바구니 항목만 삭제되도록 user 조건 포함)
+     */
+    void deleteByUserAndCartItemIdIn(User user, List<Integer> cartItemIds);
 }

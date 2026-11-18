@@ -12,7 +12,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import com.greenproject.classway.dto.CartAddRequest;
 import com.greenproject.classway.dto.CartAddResponse;
+import com.greenproject.classway.dto.CartDeleteRequest;
 import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
@@ -41,5 +43,14 @@ public class CartController {
     ) {
         CartAddResponse result = cartService.addToCart(request);
         return ResponseEntity.ok(ApiResponse.ok(result));
+    }
+
+    @Operation(summary = "장바구니 항목 삭제 API", description = "장바구니에서 선택한 항목(단건 또는 다건)을 삭제합니다.")
+    @DeleteMapping
+    public ResponseEntity<ApiResponse<Void>> deleteCartItems(
+            @Valid @RequestBody CartDeleteRequest request
+    ) {
+        cartService.deleteCartItems(request);
+        return ResponseEntity.ok(ApiResponse.ok());
     }
 }
