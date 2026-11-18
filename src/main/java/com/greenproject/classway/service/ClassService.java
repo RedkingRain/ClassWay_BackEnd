@@ -290,6 +290,19 @@ public class ClassService {
         }
         List<ClassEntity> classes = classPage.getContent();
 
+        List<ClassCardResponse> cards = toCards(classes);
+
+        // 8. 응답
+        return ClassListResponse.builder()
+                .classes(cards) // 카드 목록
+                .totalCount(classPage.getTotalElements()) // 숨김 · 삭제 뺀 전체 개수
+                .totalPages(classPage.getTotalPages()) // 전체 페이지 수
+                .build();
+    }
+
+    // 클래스 목록 -> 카드 목록 ( 전체/인기/이벤트 에서 같이 사용 )
+    // 강의 시간 | 이벤트 배지는 클래스 번호를 모아 한 번에 조회 ( N+1 방지 )
+    private List<ClassCardResponse> toCards(List<ClassEntity> classes) {
         // 4. 이번 페이지 클래스 번호 모으기
         List<Integer> classIds = new ArrayList<>();
         for (ClassEntity clazz : classes) {
@@ -320,7 +333,6 @@ public class ClassService {
             if (salePrice != null && salePrice < price) {
                 discountRate = (price - salePrice) * 100 / price;
             }
-
             // 표에서 내 번호로 꺼내기 (없으면 0초)
             Long seconds = secondsByClassId.getOrDefault(clazz.getClassId(), 0L);
 
@@ -343,13 +355,8 @@ public class ClassService {
                     .build());
         }
 
-        // 8. 응답
-        return ClassListResponse.builder()
-                .classes(cards) // 카드 목록
-                .totalCount(classPage.getTotalElements()) // 숨김 · 삭제 뺀 전체 개수
-                .totalPages(classPage.getTotalPages()) // 전체 페이지 수
-                .build();
-    }
+        return cards;
+        }
 
     // 초 → 분 (반올림, 값이 없으면 0)
     private Integer toMinutes(Integer seconds) {
