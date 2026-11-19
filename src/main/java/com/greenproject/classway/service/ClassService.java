@@ -285,11 +285,6 @@ public class ClassService {
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), MAX_CLASS_PAGE_SIZE);
 
-        // 랜덤이면 따로 처리 (메인 전용, 지금 동작 그대로)
-        if ("random".equals(sort)) {
-            return getRandomClasses(classType, safeSize);
-        }
-
         // 2. 빈 값 → null (null = 이 조건 안 씀)
         String safeKeyword = (keyword == null || keyword.isBlank()) ? null : keyword.trim();
         String safeRegion = (region == null || region.isBlank()) ? null : region.trim();
@@ -297,6 +292,14 @@ public class ClassService {
         // 3. 검색어 길이 제한
         if (safeKeyword != null && safeKeyword.length() > MAX_KEYWORD_LENGTH) {
             throw new InvalidStateException("검색어는 " + MAX_KEYWORD_LENGTH + "자 이하로 입력해주세요.");
+        }
+
+        // 랜덤은 메인 전용 (classType만 사용) → 검색 조건과 같이 오면 거부
+        if ("random".equals(sort)) {
+            if (safeKeyword != null || categoryId != null || safeRegion != null) {
+                throw new InvalidStateException("랜덤 정렬은 검색 조건과 함께 쓸 수 없습니다.");
+            }
+            return getRandomClasses(classType, safeSize);
         }
 
         // 4. classType: ONLINE / OFFLINE만 인정, 그 외는 null(전체)
@@ -310,6 +313,7 @@ public class ClassService {
         if (safeRegion != null) {
             type = ClassType.OFFLINE;
         }
+
 
         // 5. 정렬 주문서 ─ 정해 둔 값만 사용, 마지막에 classId를 붙여 같은 값끼리 순서 고정
         Sort order = switch (sort) {
