@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Locale;
 
 @Service
 @AllArgsConstructor
@@ -18,7 +19,7 @@ public class TermsService {
     @Transactional(readOnly = true)
     public TermsResponse getLatestTerms(String termsType) {
         // 1. 전달받은 약관 타입 공백 제거 및 대문자 변환
-        String normalizedType = termsType.trim().toUpperCase();
+        String normalizedType = termsType.trim().toUpperCase(Locale.ROOT);
 
         // 2. 현재 시각 기준으로 효력이 발생한 가장 최신 약관 1건 조회
         Terms terms = termsRepository
