@@ -1,6 +1,7 @@
 package com.greenproject.classway.service;
 
 import com.greenproject.classway.dto.AdminTutorListResponse;
+import com.greenproject.classway.dto.TutorRejectRequest;
 import com.greenproject.classway.entity.Tutor;
 import com.greenproject.classway.entity.User;
 import com.greenproject.classway.exceptions.AuthorizationFailureException;
@@ -91,6 +92,35 @@ public class AdminService {
         tutorRepository.save(tutor);
 
         // TODO: AlarmService 만든 뒤 신청자에게 승인 알림 보내기
+    }
+    //====================================
+    // 강사 반려 (ADMIN-002)
+    //====================================
+    /**
+     * 승인 대기 중인 강사 신청을 반려한다
+     * - 반려 사유가 비었는지는 Controller의 @Valid가 먼저 검사함(400)
+     * - approved_by, approved_at의 이름은 "승인"이지만 반려한 관리자·시간도 함께 기록하는 칸임
+     * @param tutorId 반려할 신청 번호
+     * @param request 반려 사유
+     */
+    @Transactional
+    public void rejectTutor(Integer tutorId, TutorRejectRequest request) {
+        // 1. 관리자인지 확인 (아니면 403) -> 해당 작업 처리한 관리자 기록용
+        User admin = findLoginAdmin();
+
+        // 2. 신청서가 있는지(404), 아직 승인 대기인지(400) 확인 -> 승인과 같은 공통 메서드 재사용
+        Tutor tutor = findPendingTutor(tutorId);
+
+        // 3. 반려 처리 (tutors 테이블의 칸 4개 변경)
+        tutor.setApprovalStatus(TutorApprovalStatus.REJECTED); // 상태: 승인 대기 -> 반려
+        tutor.setRejectReason(request.getRejectReason());      // 반려 사유
+        tutor.setApprovedBy(admin);                            // 처리한 관리자
+        tutor.setApprovedAt(LocalDateTime.now());              // 처리 시간
+
+        // 4. tutors 테이블에 저장
+        tutorRepository.save(tutor);
+
+        // TODO: AlarmService 만든 뒤 신청자에게 반려 알림 보내기
     }
 
     //====================================

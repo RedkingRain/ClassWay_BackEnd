@@ -2,6 +2,8 @@ package com.greenproject.classway.controller;
 
 import com.greenproject.classway.dto.AdminTutorListResponse;
 import com.greenproject.classway.dto.ApiResponse;
+import com.greenproject.classway.dto.TutorRejectRequest;
+import jakarta.validation.Valid;
 import com.greenproject.classway.global.TutorApprovalStatus;
 import com.greenproject.classway.service.AdminService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -49,6 +51,23 @@ public class AdminController {
     ) {
         // 1. Service에 승인 요청 (관리자 확인, 상태 확인, 저장은 Service가)
         adminService.approveTutor(tutorId);
+
+        // 2. 성공 응답
+        return ResponseEntity.ok(ApiResponse.ok());
+    }
+    // =============================
+    // 강사 반려 (ADMIN-002)
+    // =============================
+    @Operation(summary = "강사 반려 API",
+    description = "승인 대기 중인 강사 신청을 반려. " +
+            "반려 사유 필수(없으면 400), 이미 처리된 신청 400, 없는 신청 404, 관리자만 가능")
+    @PatchMapping("/tutors/{tutorId}/reject")
+    public ResponseEntity<ApiResponse<Void>> rejectTutor(
+            @PathVariable Integer tutorId,                 // 주소의 신청 번호
+            @Valid @RequestBody TutorRejectRequest request // 반려 사유 + 검증
+    ) {
+        // 1. Service에 반려 요청 (관리자 확인, 상태 확인, 저장은 Service가)
+        adminService.rejectTutor(tutorId, request);
 
         // 2. 성공 응답
         return ResponseEntity.ok(ApiResponse.ok());
