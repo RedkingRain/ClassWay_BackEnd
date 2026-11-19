@@ -29,7 +29,14 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import com.greenproject.classway.dto.ScheduleResponse;
 import com.greenproject.classway.global.ScheduleStatus;
+import com.greenproject.classway.dto.ClassCardResponse;
+import com.greenproject.classway.dto.ClassListResponse;
+import com.greenproject.classway.entity.ClassEvent;
+import com.greenproject.classway.repository.ClassEventRepository;
 
+import java.util.HashMap;
+import java.util.Collections;
+import java.util.Map;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -45,6 +52,16 @@ public class ClassService {
     private final ClassScheduleRepository classScheduleRepository;
     private final ReservationRepository reservationRepository;
     private final ReviewRepository reviewRepository;
+    private final ClassEventRepository classEventRepository;
+
+    // 클래스 목록 한 번에 최대 몇 개까지 줄지
+    private static final int MAX_CLASS_PAGE_SIZE = 20;
+
+    // 메인 인기 클래스 개수 (TOP 10)
+    private static final int POPULAR_CLASS_COUNT = 10;
+
+    // 메인 이벤트 클래스 최대 개수 (2줄 × 4개)
+    private static final int EVENT_CLASS_COUNT = 8;
 
     // 수강평 한 번에 최대 몇 개까지 줄지 (size=100000 같은 요청 막기)
     private static final int MAX_REVIEW_PAGE_SIZE = 20;
@@ -252,6 +269,206 @@ public class ClassService {
         }
         return result;
     }
+
+    // 공개 클래스 목록 (MAIN-003 전체 클래스, 나중에 MAIN-002 검색에도 사용)
+    // classType: ONLINE / OFFLINE (그 외 값이나 없으면 전체)
+    // sort: random(랜덤, 메인 전체 클래스) / 그 외는 최신 등록순
+    @Transactional(readOnly = true)
+    public ClassListResponse getClasses(String classType, int page, int size, String sort) {
+
+        // 1. 값 보정
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.min(Math.max(size, 1), MAX_CLASS_PAGE_SIZE);
+
+        // 랜덤이면 따로 처리 (페이지 개념 없음)
+        if ("random".equals(sort)) {
+            return getRandomClasses(classType, safeSize);
+        }
+
+        // 2. 페이지 주문서 ─ 최신 등록순 = classId 큰 순(내림차순)
+        Sort order = Sort.by(Sort.Order.desc("classId"));
+        Pageable pageable = PageRequest.of(safePage, safeSize, order);
+
+        // 3. 클래스 목록 꺼내기
+        //    classType이 "ONLINE"이면 ONLINE만, "OFFLINE"이면 OFFLINE만, 그 외는 전체
+        Page<ClassEntity> classPage;
+        if ("ONLINE".equals(classType)) {
+            classPage = classEntityRepository.findByStatusAndClassType(ClassStatus.PUBLISHED, ClassType.ONLINE, pageable);
+        } else if ("OFFLINE".equals(classType)) {
+            classPage = classEntityRepository.findByStatusAndClassType(ClassStatus.PUBLISHED, ClassType.OFFLINE, pageable);
+        } else {
+            classPage = classEntityRepository.findByStatus(ClassStatus.PUBLISHED, pageable);
+        }
+        List<ClassEntity> classes = classPage.getContent();
+
+        List<ClassCardResponse> cards = toCards(classes);
+
+        // 8. 응답
+        return ClassListResponse.builder()
+                .classes(cards) // 카드 목록
+                .totalCount(classPage.getTotalElements()) // 조건에 맞는 공개 클래스
+                .totalPages(classPage.getTotalPages()) // 전체 페이지 수
+                .build();
+    }
+
+    // 전체 클래스 랜덤 (MAIN-003): 공개 클래스 번호를 전부 꺼내 섞은 뒤 앞에서 size개
+    // 번호만 꺼내서 섞기 때문에 가볍고, 카드는 섞은 순서 그대로 만듦
+    private ClassListResponse getRandomClasses(String classType, int size) {
+
+        // 1. classType에 맞는 공개 클래스 번호 전부
+        List<Integer> ids;
+        if ("ONLINE".equals(classType)) {
+            ids = classEntityRepository.findIdsByStatusAndClassType(ClassStatus.PUBLISHED, ClassType.ONLINE);
+        } else if ("OFFLINE".equals(classType)) {
+            ids = classEntityRepository.findIdsByStatusAndClassType(ClassStatus.PUBLISHED, ClassType.OFFLINE);
+        } else {
+            ids = classEntityRepository.findIdsByStatus(ClassStatus.PUBLISHED);
+        }
+
+        // 2. 복사해서 섞기 (조회 결과를 직접 섞지 않고 새 목록에)
+        List<Integer> shuffled = new ArrayList<>(ids);
+        Collections.shuffle(shuffled);
+
+        // 3. 앞에서 size개만 (전체가 더 적으면 있는 만큼)
+        List<Integer> picked = shuffled.subList(0, Math.min(size, shuffled.size()));
+
+        // 4. 카드 만들기 (번호가 없으면 조회하지 않음)
+        List<ClassCardResponse> cards = picked.isEmpty() ? List.of() : toCardsInOrder(picked);
+
+        // 5. 응답 (랜덤은 페이지 1개)
+        return ClassListResponse.builder()
+                .classes(cards)
+                .totalCount((long) ids.size()) // 조건에 맞는 공개 클래스 전체 개수
+                .totalPages(1)
+                .build();
+    }
+
+    // 인기 클래스 (MAIN-003): 최근 30일 예약 수 TOP 10, 취소 제외, 공개 클래스만
+    @Transactional(readOnly = true)
+    public List<ClassCardResponse> getPopularClasses() {
+
+        // 1. 기준 시각 = 지금 - 30일
+        LocalDateTime since = LocalDateTime.now().minusDays(30);
+
+        // 2. 개수 제한 주문서 (첫 페이지에서 10개)
+        Pageable top = PageRequest.of(0, POPULAR_CLASS_COUNT);
+
+        // 3. 인기 클래스 번호 (순위 순서)  예: [1, 6, 4, 9, 5, 2, 13]
+        List<Integer> popularIds = reservationRepository.findPopularClassIds(
+                since, ReservationStatus.CANCELED, ClassStatus.PUBLISHED, top);
+
+        // 4. 비어 있으면 바로 끝 (최근 30일 예약이 없을 때)
+        if (popularIds.isEmpty()) {
+            return List.of();
+        }
+
+        // 5~7. 순위 순서대로 카드 만들기
+        return toCardsInOrder(popularIds);
+    }
+
+    // 이벤트 중인 클래스 (MAIN-003): 노출 켜짐 + 지금이 노출 기간 안, 공개 클래스만, 최대 8개
+    @Transactional(readOnly = true)
+    public List<ClassCardResponse> getEventClasses() {
+
+        // 1~2. 개수 제한 주문서 (첫 페이지에서 8개)
+        Pageable top = PageRequest.of(0, EVENT_CLASS_COUNT);
+
+        // 3. 이벤트 중인 클래스 번호 (마감 임박순)
+        List<Integer> eventClassIds = classEventRepository.findEventClassIds(
+                LocalDateTime.now(), ClassStatus.PUBLISHED, top);
+
+        // 4. 비어 있으면 바로 끝
+        if (eventClassIds.isEmpty()) {
+            return List.of();
+        }
+
+        // 5~7. 번호 순서대로 카드 만들기
+        return toCardsInOrder(eventClassIds);
+    }
+
+    // 번호 목록 순서 그대로 카드 만들기 (인기 / 이벤트에서 같이 사용)
+    // findByClassIdIn은 순서를 지켜주지 않아서, 표로 만든 뒤 번호 순서대로 다시 담음
+    private List<ClassCardResponse> toCardsInOrder(List<Integer> classIds) {
+
+        // 1. 클래스 한 번에 꺼내기 (순서 섞여 있음)
+        List<ClassEntity> classes = classEntityRepository.findByClassIdIn(classIds);
+
+        // 2. 「번호 → 클래스」 표 만들기
+        Map<Integer, ClassEntity> classById = new HashMap<>();
+        for (ClassEntity clazz : classes) {
+            classById.put(clazz.getClassId(), clazz);
+        }
+
+        // 3. 번호 목록을 앞에서부터 돌면서 표에서 꺼내 담기 → 순서 회복
+        List<ClassEntity> sorted = new ArrayList<>();
+        for (Integer id : classIds) {
+            ClassEntity clazz = classById.get(id);
+            if (clazz != null) {          // 조회 사이에 지워진 클래스 대비
+                sorted.add(clazz);
+            }
+        }
+
+        // 4. 카드 만들기
+        return toCards(sorted);
+    }
+
+    // 클래스 목록 -> 카드 목록 ( 전체/인기/이벤트 에서 같이 사용 )
+    // 강의 시간 | 이벤트 배지는 클래스 번호를 모아 한 번에 조회 ( N+1 방지 )
+    private List<ClassCardResponse> toCards(List<ClassEntity> classes) {
+        // 4. 이번 페이지 클래스 번호 모으기
+        List<Integer> classIds = new ArrayList<>();
+        for (ClassEntity clazz : classes) {
+            classIds.add(clazz.getClassId());
+        }
+
+        // 5. 강의 시간 합계 → 「번호 → 합계(초)」 표
+        Map<Integer, Long> secondsByClassId = new HashMap<>();
+        // 6. 노출 중인 이벤트 배지 → 「번호 → 배지 문구」 표
+        Map<Integer, String> labelByClassId = new HashMap<>();
+
+        // 목록이 비어 있으면 IN ( ) 조회를 할 필요가 없음
+        if (!classIds.isEmpty()) {
+            for (LectureRepository.ClassDurationRow row : lectureRepository.sumDurationByClassIds(classIds)) {
+                secondsByClassId.put(row.getClassId(), row.getTotalSeconds());
+            }
+            for (ClassEvent event : classEventRepository.findActiveEvents(classIds, LocalDateTime.now())) {
+                labelByClassId.put(event.getClazz().getClassId(), event.getLabel());
+            }
+        }
+
+        // 7. 카드 만들기
+        List<ClassCardResponse> cards = new ArrayList<>();
+        for (ClassEntity clazz : classes) {
+            Integer price = clazz.getPrice();
+            Integer salePrice = clazz.getSalePrice();
+            int discountRate = 0;
+            if (salePrice != null && salePrice < price) {
+                discountRate = (price - salePrice) * 100 / price;
+            }
+            // 표에서 내 번호로 꺼내기 (없으면 0초)
+            Long seconds = secondsByClassId.getOrDefault(clazz.getClassId(), 0L);
+
+            cards.add(ClassCardResponse.builder()
+                    .classId(clazz.getClassId())
+                    .title(clazz.getTitle())
+                    .thumbnailUrl(clazz.getThumbnailUrl())
+                    .classType(clazz.getClassType().name())
+                    .categoryId(clazz.getCategory().getCategoryId())
+                    .categoryName(clazz.getCategory().getName())
+                    .price(price)
+                    .salePrice(salePrice)
+                    .discountRate(discountRate)
+                    .avgRating(clazz.getAvgRating())
+                    .reviewCount(clazz.getReviewCount())
+                    .wishCount(clazz.getWishCount())
+                    .totalDurationMinutes(toMinutes(seconds.intValue()))
+                    .tutorNickname(clazz.getTutor().getUser().getNickname())
+                    .eventLabel(labelByClassId.get(clazz.getClassId())) // 없으면 null
+                    .build());
+        }
+
+        return cards;
+        }
 
     // 초 → 분 (반올림, 값이 없으면 0)
     private Integer toMinutes(Integer seconds) {
