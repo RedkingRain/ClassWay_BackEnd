@@ -33,6 +33,7 @@ import com.greenproject.classway.dto.ClassCardResponse;
 import com.greenproject.classway.dto.ClassListResponse;
 import com.greenproject.classway.entity.ClassEvent;
 import com.greenproject.classway.repository.ClassEventRepository;
+import com.greenproject.classway.exceptions.InvalidStateException;
 
 import java.util.HashMap;
 import java.util.Collections;
@@ -56,6 +57,9 @@ public class ClassService {
 
     // 클래스 목록 한 번에 최대 몇 개까지 줄지
     private static final int MAX_CLASS_PAGE_SIZE = 20;
+
+    // 검색어 최대 글자 수
+    private static final int MAX_KEYWORD_LENGTH = 50;
 
     // 메인 인기 클래스 개수 (TOP 10)
     private static final int POPULAR_CLASS_COUNT = 10;
@@ -270,38 +274,58 @@ public class ClassService {
         return result;
     }
 
-    // 공개 클래스 목록 (MAIN-003 전체 클래스, 나중에 MAIN-002 검색에도 사용)
-    // classType: ONLINE / OFFLINE (그 외 값이나 없으면 전체)
-    // sort: random(랜덤, 메인 전체 클래스) / 그 외는 최신 등록순
+    // 공개 클래스 목록 + 검색 (MAIN-002 검색 / 카테고리, MAIN-003 메인 전체 클래스)
+    // keyword, categoryId, classType, region: 비어 있으면 조건 안 씀 / region을 고르면 오프라인만
+    // sort: latest(최신) / popular(찜 많은 순) / rating(별점, 후기 수) / random(메인 전용)
     @Transactional(readOnly = true)
-    public ClassListResponse getClasses(String classType, int page, int size, String sort) {
+    public ClassListResponse getClasses(String keyword, Integer categoryId, String classType, String region,
+                                        int page, int size, String sort) {
 
         // 1. 값 보정
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), MAX_CLASS_PAGE_SIZE);
 
-        // 랜덤이면 따로 처리 (페이지 개념 없음)
+        // 랜덤이면 따로 처리 (메인 전용, 지금 동작 그대로)
         if ("random".equals(sort)) {
             return getRandomClasses(classType, safeSize);
         }
 
-        // 2. 페이지 주문서 ─ 최신 등록순 = classId 큰 순(내림차순)
-        Sort order = Sort.by(Sort.Order.desc("classId"));
+        // 2. 빈 값 → null (null = 이 조건 안 씀)
+        String safeKeyword = (keyword == null || keyword.isBlank()) ? null : keyword.trim();
+        String safeRegion = (region == null || region.isBlank()) ? null : region.trim();
+
+        // 3. 검색어 길이 제한
+        if (safeKeyword != null && safeKeyword.length() > MAX_KEYWORD_LENGTH) {
+            throw new InvalidStateException("검색어는 " + MAX_KEYWORD_LENGTH + "자 이하로 입력해주세요.");
+        }
+
+        // 4. classType: ONLINE / OFFLINE만 인정, 그 외는 null(전체)
+        ClassType type = null;
+        if ("ONLINE".equals(classType)) {
+            type = ClassType.ONLINE;
+        } else if ("OFFLINE".equals(classType)) {
+            type = ClassType.OFFLINE;
+        }
+        // 지역을 고르면 오프라인만 (온라인은 지역이 없음)
+        if (safeRegion != null) {
+            type = ClassType.OFFLINE;
+        }
+
+        // 5. 정렬 주문서 ─ 정해 둔 값만 사용, 마지막에 classId를 붙여 같은 값끼리 순서 고정
+        Sort order = switch (sort) {
+            case "popular" -> Sort.by(Sort.Order.desc("wishCount"), Sort.Order.desc("classId"));
+            case "rating" -> Sort.by(Sort.Order.desc("avgRating"), Sort.Order.desc("reviewCount"),
+                    Sort.Order.desc("classId"));
+            default -> Sort.by(Sort.Order.desc("classId")); // latest
+        };
         Pageable pageable = PageRequest.of(safePage, safeSize, order);
 
-        // 3. 클래스 목록 꺼내기
-        //    classType이 "ONLINE"이면 ONLINE만, "OFFLINE"이면 OFFLINE만, 그 외는 전체
-        Page<ClassEntity> classPage;
-        if ("ONLINE".equals(classType)) {
-            classPage = classEntityRepository.findByStatusAndClassType(ClassStatus.PUBLISHED, ClassType.ONLINE, pageable);
-        } else if ("OFFLINE".equals(classType)) {
-            classPage = classEntityRepository.findByStatusAndClassType(ClassStatus.PUBLISHED, ClassType.OFFLINE, pageable);
-        } else {
-            classPage = classEntityRepository.findByStatus(ClassStatus.PUBLISHED, pageable);
-        }
-        List<ClassEntity> classes = classPage.getContent();
+        // 6. 조건에 맞는 공개 클래스 꺼내기 (쿼리 1개)
+        Page<ClassEntity> classPage = classEntityRepository.searchClasses(
+                ClassStatus.PUBLISHED, safeKeyword, categoryId, type, safeRegion, pageable);
 
-        List<ClassCardResponse> cards = toCards(classes);
+        // 7. 카드 만들기
+        List<ClassCardResponse> cards = toCards(classPage.getContent());
 
         // 8. 응답
         return ClassListResponse.builder()

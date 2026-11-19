@@ -56,15 +56,19 @@ public class ClassController {
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
-    @Operation(summary = "클래스 목록 조회 API", description = "공개 클래스 목록, classType: ONLINE / OFFLINE / 없으면 전체, sort: random(랜덤) / 없으면 최신 등록순")
+    @Operation(summary = "클래스 목록, 검색 API",
+            description = "공개 클래스 목록. keyword(제목, 소개, 강사 닉네임), categoryId, classType(ONLINE / OFFLINE), region(시/도, 오프라인만) / sort: latest, popular, rating, random(메인)")
     @GetMapping
     public ResponseEntity<ApiResponse<ClassListResponse>> getClasses(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Integer categoryId,
             @RequestParam(required = false) String classType,
+            @RequestParam(required = false) String region,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "12") int size,
             @RequestParam(defaultValue = "latest") String sort
     ) {
-        ClassListResponse result = classService.getClasses(classType, page, size, sort);
+        ClassListResponse result = classService.getClasses(keyword, categoryId, classType, region, page, size, sort);
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
