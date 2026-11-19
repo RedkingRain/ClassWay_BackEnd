@@ -1,9 +1,14 @@
 package com.greenproject.classway.repository;
 
 import com.greenproject.classway.entity.Reservation;
+import com.greenproject.classway.global.ClassStatus;
 import com.greenproject.classway.global.ReservationStatus;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 public interface ReservationRepository extends JpaRepository<Reservation, Integer> {
@@ -11,4 +16,20 @@ public interface ReservationRepository extends JpaRepository<Reservation, Intege
     long countByClazz_ClassIdAndStatusIn(Integer classId, List<ReservationStatus> statuses);
     // 이 회원이 이 클래스를 수강 중인지 (로그인 토큰의 이메일로 확인)
     boolean existsByUser_EmailAndClazz_ClassIdAndStatus(String email, Integer classId, ReservationStatus status);
+
+    // 최근 예약 많은 클래스 번호 (취소 제외, 공개 클래스만, 예약 수 같으면 최신 등록순)
+    // 몇 개까지 꺼낼지는 pageable로 정함 (TOP 10 → PageRequest.of(0, 10))
+    @Query("""
+            SELECT r.clazz.classId
+            FROM Reservation r
+            WHERE r.reservedAt >= :since
+              AND r.status <> :canceled
+              AND r.clazz.status = :published
+            GROUP BY r.clazz.classId
+            ORDER BY COUNT(r) DESC, r.clazz.classId DESC
+            """)
+    List<Integer> findPopularClassIds(@Param("since") LocalDateTime since,
+                                      @Param("canceled") ReservationStatus canceled,
+                                      @Param("published") ClassStatus published,
+                                      Pageable pageable);
 }

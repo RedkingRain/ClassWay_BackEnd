@@ -1,8 +1,6 @@
 package com.greenproject.classway.controller;
 
-import com.greenproject.classway.dto.ApiResponse;
-import com.greenproject.classway.dto.ClassDetailResponse;
-import com.greenproject.classway.dto.ScheduleResponse;
+import com.greenproject.classway.dto.*;
 import com.greenproject.classway.service.ClassService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -14,7 +12,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import com.greenproject.classway.dto.ReviewListResponse;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.List;
@@ -58,6 +55,33 @@ public class ClassController {
         List<ScheduleResponse> result = classService.getSchedules(classId);
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
+
+    @Operation(summary = "클래스 목록 조회 API", description = "공개 클래스 목록, classType: ONLINE / OFFLINE / 없으면 전체, sort: random(랜덤) / 없으면 최신 등록순")
+    @GetMapping
+    public ResponseEntity<ApiResponse<ClassListResponse>> getClasses(
+            @RequestParam(required = false) String classType,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "12") int size,
+            @RequestParam(defaultValue = "latest") String sort
+    ) {
+        ClassListResponse result = classService.getClasses(classType, page, size, sort);
+        return ResponseEntity.ok(ApiResponse.ok(result));
+    }
+
+    @Operation(summary = "인기 클래스 조회 API", description = "최근 30일 예약 수 TOP 10 (취소 제외, 공개 클래스만)")
+    @GetMapping("/popular")
+    public ResponseEntity<ApiResponse<List<ClassCardResponse>>> getPopularClasses() {
+        List<ClassCardResponse> result = classService.getPopularClasses();
+        return ResponseEntity.ok(ApiResponse.ok(result));
+    }
+
+    @Operation(summary = "이벤트 클래스 조회 API", description = "노출 중인 이벤트 배지가 있는 공개 클래스 (마감 임박순, 최대 8개)")
+    @GetMapping("/events")
+    public ResponseEntity<ApiResponse<List<ClassCardResponse>>> getEventClasses() {
+        List<ClassCardResponse> result = classService.getEventClasses();
+        return ResponseEntity.ok(ApiResponse.ok(result));
+    }
 }
+
 
 
