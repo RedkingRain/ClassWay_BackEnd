@@ -77,6 +77,9 @@ public class SecurityConfig {
                     // 비로그인도 볼 수 있는 클래스, 카테고리 조회 API (GET만 허용, 등록/수정/삭제는 로그인 필요)
                     .requestMatchers(HttpMethod.GET, "/classes/**", "/categories")
                     .permitAll()
+                    // 정적 이미지 (카테고리 아이콘 등, static/images 폴더) — 누구나 보기만 가능
+                    .requestMatchers(HttpMethod.GET, "/images/**")
+                    .permitAll()
                     .anyRequest().authenticated() // 나머지 모든 요청은 인증 필요
             ).addFilterBefore(authenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
