@@ -109,4 +109,31 @@ public class AuthController {
         authService.verifyEmailCode(emailVerifyRequest);
         return ResponseEntity.ok(ApiResponse.ok());
     }
+
+    @Operation(summary = "아이디(이메일) 찾기 API", description = "이름과 전화번호로 회원 이메일을 조회하여 마스킹 처리 후 반환")
+    @PostMapping("/find_email")
+    public ResponseEntity<ApiResponse<FindEmailResponse>> findEmail(
+            @Valid @RequestBody FindEmailRequest findEmailRequest
+    ) {
+        FindEmailResponse result = authService.findEmail(findEmailRequest);
+        return ResponseEntity.ok(ApiResponse.ok(result));
+    }
+
+    @Operation(summary = "비밀번호 초기화 API", description = "이메일 인증 후 새로운 비밀번호로 초기화")
+    @PatchMapping("/password_reset")
+    public ResponseEntity<ApiResponse<Void>> resetPassword(
+            @Valid @RequestBody PasswordResetRequest passwordResetRequest
+    ) {
+        authService.resetPassword(passwordResetRequest);
+        return ResponseEntity.ok(ApiResponse.ok());
+    }
+
+    @Operation(summary = "패스워드 초기화 인증번호 발송 API", description = "전달받은 이메일이 소셜 로그인 계정인지 확인 후 아닐 시 인증번호 발송")
+    @PostMapping("/password_reset/check_email")
+    public ResponseEntity<ApiResponse<Void>> socialCheckEmailSend(
+            @Valid @RequestBody EmailCheckRequest emailCheckRequest
+    ) {
+        authService.socialCheckEmailSend(emailCheckRequest);
+        return ResponseEntity.ok(ApiResponse.ok());
+    }
 }

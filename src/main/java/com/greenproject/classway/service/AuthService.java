@@ -4,6 +4,7 @@ import com.greenproject.classway.dto.*;
 import com.greenproject.classway.entity.*;
 import com.greenproject.classway.exceptions.*;
 import com.greenproject.classway.global.FileStatus;
+import com.greenproject.classway.global.UserProvider;
 import com.greenproject.classway.global.UserState;
 import com.greenproject.classway.repository.*;
 import com.greenproject.classway.security.JwtTokenProvider;
@@ -370,12 +371,19 @@ public class AuthService {
     // 이메일 중복 체크 및 인증번호 발송
     @Transactional
     public void checkEmail(EmailCheckRequest emailCheckRequest) {
-        // 1. DB에서 이미 존재하는 이메일인지 확인
-        boolean exists = userRepository.existsByEmail(emailCheckRequest.getEmail());
+        // 1. DB에서 이메일로 유저 정보 조회
+        Optional<User> optionalUser = userRepository.findByEmail(emailCheckRequest.getEmail());
 
-        // 2. 존재한다면 에러 리턴
-        if (exists) {
-            throw new ResourceConflictException("이미 사용 중인 계정입니다.");
+        // 2. 유저 정보가 존재하는지 확인
+        if (!optionalUser.isEmpty()) {
+            User user = optionalUser.get();
+            // 2-1. 존재 시, 해당 계정이 소셜 로그인 계정인지 확인
+            if (!user.getProvider().equals(UserProvider.LOCAL)) {
+                throw new ResourceConflictException("소셜 로그인 계정입니다.");
+            }
+            else {
+                throw new ResourceConflictException("이미 사용 중인 계정입니다.");
+            }
         }
 
         // 3. Google SMTP를 통한 인증번호 이메일 발송
@@ -424,5 +432,130 @@ public class AuthService {
         if (!verification.getCode().equals(emailVerifyRequest.getCode())) {
             throw new UnauthenticatedException("인증번호가 일치하지 않습니다.");
         }
+    }
+
+    // 아이디(이메일) 찾기
+    @Transactional(readOnly = true)
+    public FindEmailResponse findEmail(FindEmailRequest findEmailRequest) {
+        // 1. 이름과 전화번호로 회원 다건 조회
+        List<User> users = userRepository.findByNameAndPhone(findEmailRequest.getName(), findEmailRequest.getPhone());
+
+        if (users.isEmpty()) {
+            throw new ResourceNotFoundException("입력하신 정보와 일치하는 회원이 존재하지 않습니다.");
+        }
+
+        // 2. 활성 계정 필터링
+        List<User> activeUsers = users.stream()
+                .filter(user -> user.getStatus() == UserState.ACTIVE)
+                .toList();
+
+        // 3. 활성 계정이 없고 비활성 계정만 존재하는 경우 예외 처리
+        if (activeUsers.isEmpty()) {
+            boolean hasWithdrawn = users.stream()
+                    .anyMatch(user -> user.getStatus() == UserState.WITHDRAWN);
+            if (hasWithdrawn) {
+                throw new UnauthenticatedException("휴면 처리 된 회원 입니다.");
+            }
+            throw new UnauthenticatedException("탈퇴 처리 된 회원 입니다.");
+        }
+
+        // 4. 이메일 마스킹 처리 및 가입 방식(provider) 매핑
+        List<FindEmailResponse.EmailInfo> maskedEmails = activeUsers.stream()
+                .map(user -> new FindEmailResponse.EmailInfo(
+                        maskEmail(user.getEmail()),
+                        user.getProvider().name()
+                ))
+                .toList();
+
+        return new FindEmailResponse(maskedEmails);
+    }
+
+    // 이메일 마스킹 헬퍼 메서드
+    private String maskEmail(String email) {
+        int atIndex = email.indexOf('@');
+        if (atIndex <= 0) {
+            return email;
+        }
+
+        String localPart = email.substring(0, atIndex);
+        String domainPart = email.substring(atIndex);
+        int length = localPart.length();
+
+        String maskedLocal;
+        if (length >= 4) {
+            maskedLocal = localPart.substring(0, 2) + "*".repeat(length - 2);
+        } else if (length == 3) {
+            maskedLocal = localPart.substring(0, 1) + "**";
+        } else if (length == 2) {
+            maskedLocal = "**";
+        } else {
+            maskedLocal = "*";
+        }
+
+        return maskedLocal + domainPart;
+    }
+
+    // 비밀번호 초기화
+    @Transactional
+    public void resetPassword(PasswordResetRequest passwordResetRequest) {
+        // 1. 이메일 인증번호 재검증
+        EmailVerification verification = emailVerificationRepository
+                .findTopByEmailOrderByIdDesc(passwordResetRequest.getEmail())
+                .orElseThrow(() -> new UnauthenticatedException("인증번호가 만료되었습니다. 재발송하여 인증해주십쇼."));
+
+        if (verification.getExpiresAt().isBefore(LocalDateTime.now())) {
+            throw new UnauthenticatedException("인증번호가 만료되었습니다. 재발송하여 인증해주십쇼.");
+        }
+
+        if (!verification.getCode().equals(passwordResetRequest.getCode())) {
+            throw new UnauthenticatedException("인증번호가 일치하지 않습니다.");
+        }
+
+        // 2. 회원 존재 및 계정 상태 검증
+        User user = userRepository.findByEmail(passwordResetRequest.getEmail())
+                .orElseThrow(() -> new ResourceNotFoundException("입력하신 정보와 일치하는 회원이 존재하지 않습니다."));
+
+        if (user.getStatus() == UserState.DISABLED) {
+            throw new UnauthenticatedException("탈퇴 처리 된 회원 입니다.");
+        } else if (user.getStatus() == UserState.WITHDRAWN) {
+            throw new UnauthenticatedException("휴면 처리 된 회원 입니다.");
+        }
+
+        // 3. 기존 비밀번호와 동일 여부 검증
+        if (user.getPassword() != null && passwordEncoder.matches(passwordResetRequest.getPassword(), user.getPassword())) {
+            throw new InvalidStateException("기존 비밀번호와 동일한 비밀번호로 변경할 수 없습니다.");
+        }
+
+        // 4. 새 비밀번호 암호화 및 업데이트
+        String hashedPassword = passwordEncoder.encode(passwordResetRequest.getPassword());
+        user.setPassword(hashedPassword);
+        userRepository.save(user);
+
+        // 5. 기존 리프레시 토큰 만료(삭제) 및 사용한 이메일 인증 정보 삭제
+        List<RefreshToken> tokens = refreshTokenRepository.findByUserId(user.getId());
+        refreshTokenRepository.deleteAll(tokens);
+        emailVerificationRepository.delete(verification);
+    }
+
+    // 이메일 소셜 계정 체크 및 인증번호 발송
+    @Transactional
+    public void socialCheckEmailSend(EmailCheckRequest emailCheckRequest) {
+        // 1. DB에서 이메일로 유저 정보 조회
+        Optional<User> optionalUser = userRepository.findByEmail(emailCheckRequest.getEmail());
+
+        // 2. 유저 정보가 존재하는지 확인
+        if (optionalUser.isEmpty()) {
+            throw new ResourceNotFoundException("존재하지 않는 계정입니다.");
+        }
+        else {
+            User user = optionalUser.get();
+            // 2-1. 존재 시, 해당 계정이 소셜 로그인 계정인지 확인
+            if (!user.getProvider().equals(UserProvider.LOCAL)) {
+                throw new ResourceConflictException("소셜 로그인 계정입니다.");
+            }
+        }
+
+        // 3. Google SMTP를 통한 인증번호 이메일 발송
+        sendVerificationEmail(emailCheckRequest.getEmail());
     }
 }
