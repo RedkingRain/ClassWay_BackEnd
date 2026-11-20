@@ -28,7 +28,6 @@ public class AlarmController {
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
-    // read-all을 {alarmId}보다 먼저 둬서 주소가 헷갈리지 않게
     @Operation(summary = "알림 모두 읽음 API", description = "로그인한 회원의 안 읽은 알림을 모두 읽음 처리")
     @PatchMapping("/read-all")
     public ResponseEntity<ApiResponse<Void>> readAllAlarms() {
