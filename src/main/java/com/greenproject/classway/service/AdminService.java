@@ -1,21 +1,33 @@
 package com.greenproject.classway.service;
 
+import com.greenproject.classway.dto.AdminTutorCountResponse;
+import com.greenproject.classway.dto.AdminTutorDetailResponse;
 import com.greenproject.classway.dto.AdminTutorListResponse;
+import com.greenproject.classway.dto.TutorFileDownload;
+import com.greenproject.classway.dto.TutorFileResponse;
 import com.greenproject.classway.dto.TutorRejectRequest;
 import com.greenproject.classway.entity.Tutor;
+import com.greenproject.classway.entity.TutorsCareerFile;
 import com.greenproject.classway.entity.User;
 import com.greenproject.classway.exceptions.AuthorizationFailureException;
 import com.greenproject.classway.exceptions.ResourceNotFoundException;
 import com.greenproject.classway.exceptions.InvalidStateException;
+import com.greenproject.classway.global.AlarmType;
 import com.greenproject.classway.global.TutorApprovalStatus;
 import com.greenproject.classway.global.UserRole;
 import com.greenproject.classway.repository.TutorRepository;
+import com.greenproject.classway.repository.TutorsCareerFileRepository;
 import com.greenproject.classway.repository.UserRepository;
-import lombok.AllArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.FileSystemResource;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,10 +38,26 @@ import java.util.List;
  * - 모든 메서드는 첫 줄에서 findLoginAdmin()으로 관리자인지 검사 (아니면 403)
  */
 @Service
-@AllArgsConstructor
 public class AdminService {
     private final UserRepository userRepository;    // 로그인한 사용자가 관리자인지 확인용
     private final TutorRepository tutorRepository;  // 강사 신청서 조회·수정용
+    private final TutorsCareerFileRepository tutorsCareerFileRepository; // 제출 자료 파일 조회용
+    private final AlarmService alarmService;        // 승인·반려 결과를 신청자에게 알림
+    private final Path uploadRoot;                  // 업로드 폴더 (제출 자료 보기 때 이 폴더 밖 파일은 막음)
+
+    // @Value는 Lombok 생성자로 넘길 수 없어서 생성자를 직접 작성
+    public AdminService(UserRepository userRepository,
+                        TutorRepository tutorRepository,
+                        TutorsCareerFileRepository tutorsCareerFileRepository,
+                        AlarmService alarmService,
+                        @Value("${spring.file.storage}") String uploadDir) {
+        this.userRepository = userRepository;
+        this.tutorRepository = tutorRepository;
+        this.tutorsCareerFileRepository = tutorsCareerFileRepository;
+        this.alarmService = alarmService;
+        // 파일 저장(LocalFileStorageServiceImpl)과 같은 설정값 → 절대 경로로 바꿔 둠
+        this.uploadRoot = Paths.get(uploadDir).toAbsolutePath().normalize();
+    }
 
     //====================================
     // 강사 신청 목록 조회 (ADMIN-002)
@@ -46,7 +74,7 @@ public class AdminService {
         // 1. 관리자인지 확인 (아니면 403, 여기서 멈춤)
         findLoginAdmin();
 
-        // 2. 해당 상태의 신청서들을 DB에서 꺼냄. (신청일 오래된 순으로)
+        // 2. 해당 상태의 신청서들을 신청자(users)와 함께 DB에서 꺼냄. (신청일 오래된 순으로)
         List<Tutor> tutors =
                 tutorRepository.findByApprovalStatusOrderByAppliedAtAsc(status);
 
@@ -68,6 +96,126 @@ public class AdminService {
         return result;
     }
     //====================================
+    // 강사 신청 탭별 건수 (ADMIN-002)
+    //====================================
+    /**
+     * 승인 대기·승인·반려 탭에 표시할 건수 조회
+     * @return 상태별 건수 (0건인 상태도 0으로 채움)
+     */
+    @Transactional(readOnly = true)
+    public AdminTutorCountResponse getTutorApplicationCounts() {
+        // 1. 관리자인지 확인 (아니면 403)
+        findLoginAdmin();
+
+        // 2. 상태별 건수 조회 → 결과 한 줄 = [상태, 건수]
+        long pending = 0;
+        long approved = 0;
+        long rejected = 0;
+        for (Object[] row : tutorRepository.countGroupByApprovalStatus()) {
+            TutorApprovalStatus status = (TutorApprovalStatus) row[0];
+            long count = (Long) row[1];
+            switch (status) {
+                case PENDING -> pending = count;
+                case APPROVED -> approved = count;
+                case REJECTED -> rejected = count;
+            }
+        }
+        // 3. 결과에 없던 상태는 0 그대로
+        return new AdminTutorCountResponse(pending, approved, rejected);
+    }
+    //====================================
+    // 강사 신청 상세 조회 (ADMIN-002)
+    //====================================
+    /**
+     * 강사 신청 한 건의 상세 정보 조회 (신청자 정보 + 경력 + 제출 자료 + 처리 결과)
+     * - 승인 대기·승인·반려 어느 탭에서 눌러도 볼 수 있어야 함
+     *   → 대기 중인지 검사하는 findPendingTutor(400) 대신, 있는지만 검사하는 findTutor(404) 사용
+     * @param tutorId 조회할 신청 번호
+     * @return 신청 상세 정보
+     */
+    @Transactional(readOnly = true)
+    public AdminTutorDetailResponse getTutorApplicationDetail(Integer tutorId) {
+        // 1. 관리자인지 확인 (아니면 403)
+        findLoginAdmin();
+
+        // 2. 신청서 찾기 (없으면 404)
+        Tutor tutor = findTutor(tutorId);
+        User applicant = tutor.getUser(); // 신청자 회원 정보 (users)
+
+        // 3. 제출 자료 파일들 꺼내서(올린 순서대로) 응답용 상자로 옮겨 담기
+        //    - 가입 시 파일이 TEMP로만 저장되고 있어서 status로 거르지 않음
+        List<TutorsCareerFile> careerFiles = tutorsCareerFileRepository.findByTutorOrderByFileIdAsc(tutor);
+        List<TutorFileResponse> files = new ArrayList<>();
+        for (TutorsCareerFile file : careerFiles) {
+            files.add(new TutorFileResponse(file.getFileId(), toOriginalFileName(file.getFileName())));
+        }
+
+        // 4. 상세 응답 만들기 (DTO 필드 순서와 같게)
+        return new AdminTutorDetailResponse(
+                tutor.getTutorId(),                  // 신청 번호
+                applicant.getName(),                 // 이름
+                applicant.getEmail(),                // 이메일
+                applicant.getPhone(),                // 연락처
+                tutor.getAppliedAt(),                // 신청일
+                tutor.getCareer(),                   // 경력 (가입 때 선택 입력이라 null 가능)
+                files,                               // 제출 자료 목록
+                tutor.getApprovalStatus().name(),    // 상태 (enum → 문자열)
+                tutor.getRejectReason(),             // 반려 사유 (없으면 null)
+                tutor.getApprovedAt()                // 처리 시간 (없으면 null)
+        );
+    }
+    //====================================
+    // 강사 제출 자료 보기 (ADMIN-002)
+    //====================================
+    /**
+     * 강사 신청서에 첨부된 제출 자료 파일 1개를 꺼낸다
+     * @param tutorId 신청 번호
+     * @param fileId  파일 번호 (상세 조회의 files[].fileId)
+     * @return 파일 + Content-Type + 원래 파일명
+     * @throws ResourceNotFoundException     파일 정보가 없거나 다른 신청서 파일일 때, 디스크에 파일이 없을 때 (404)
+     * @throws AuthorizationFailureException 파일 경로가 업로드 폴더 밖일 때 (403)
+     */
+    @Transactional(readOnly = true)
+    public TutorFileDownload getTutorFile(Integer tutorId, Integer fileId) {
+        // 1. 관리자인지 확인 (아니면 403)
+        findLoginAdmin();
+
+        // 2. 파일 번호 + 신청 번호가 둘 다 맞는 파일 정보 찾기 (없으면 404)
+        TutorsCareerFile file = tutorsCareerFileRepository.findByFileIdAndTutor_TutorId(fileId, tutorId)
+                .orElseThrow(() -> new ResourceNotFoundException("존재하지 않는 파일입니다."));
+
+        // 3. DB에 저장된 경로를 절대 경로로 정리 ("../" 같은 표현 제거)
+        Path path = Paths.get(file.getFileUrl()).toAbsolutePath().normalize();
+
+        // 4. 업로드 폴더 밖의 파일이면 막음 (경로 조작으로 서버 파일을 읽는 것 방지)
+        if (!path.startsWith(uploadRoot)) {
+            throw new AuthorizationFailureException("접근할 수 없는 파일입니다.");
+        }
+
+        // 5. 디스크에 실제 파일이 없으면 404
+        if (!Files.isRegularFile(path)) {
+            throw new ResourceNotFoundException("파일을 찾을 수 없습니다.");
+        }
+
+        // 6. 파일 종류 판별 (모르면 일반 바이너리)
+        String contentType = null;
+        try {
+            contentType = Files.probeContentType(path);
+        } catch (IOException ignored) {
+            // 판별 실패 → 아래에서 기본값 사용
+        }
+        if (contentType == null) {
+            contentType = "application/octet-stream";
+        }
+
+        // 7. 파일 + 종류 + 원래 파일명 돌려주기
+        return new TutorFileDownload(
+                new FileSystemResource(path),
+                contentType,
+                toOriginalFileName(file.getFileName())
+        );
+    }
+    //====================================
     // 강사 승인 (ADMIN-002)
     //====================================
     /**
@@ -82,16 +230,19 @@ public class AdminService {
 
         // 2. 신청서가 있는지 (404), 아직 승인 대기인지(400) 확인
         Tutor tutor = findPendingTutor(tutorId);
+        User applicant = tutor.getUser(); // 알림 받을 신청자
 
-        // 3. 승인 처리 (tutors 테이블의 칸 3개 변경)
-        tutor.setApprovalStatus(TutorApprovalStatus.APPROVED); // 상태: 승인 대기 -> 승인
-        tutor.setApprovedBy(admin);                            // 처리한 관리자
-        tutor.setApprovedAt(LocalDateTime.now());               // 처리 시간
+        // 3. 승인 처리 - PENDING일 때만 바뀌는 UPDATE (상태, 처리한 관리자, 처리 시간)
+        //    0건 = 2번 확인 뒤 다른 관리자가 먼저 처리함 → 400
+        int updated = tutorRepository.processPendingApplication(
+                tutorId, TutorApprovalStatus.APPROVED, null, admin, LocalDateTime.now());
+        if (updated == 0) {
+            throw new InvalidStateException("이미 처리된 강사 신청입니다.");
+        }
 
-        // 4. tutors 테이블에 저장
-        tutorRepository.save(tutor);
-
-        // TODO: AlarmService 만든 뒤 신청자에게 승인 알림 보내기
+        // 4. 신청자에게 승인 알림 (같은 트랜잭션 → 알림 저장이 실패하면 승인도 취소)
+        // TODO: 알림 클릭 시 이동할 주소(linkUrl)는 프론트와 협의 후 지정
+        alarmService.send(applicant, AlarmType.CONFIRM, "강사 신청이 승인되었습니다.", null);
     }
     //====================================
     // 강사 반려 (ADMIN-002)
@@ -110,17 +261,20 @@ public class AdminService {
 
         // 2. 신청서가 있는지(404), 아직 승인 대기인지(400) 확인 -> 승인과 같은 공통 메서드 재사용
         Tutor tutor = findPendingTutor(tutorId);
+        User applicant = tutor.getUser(); // 알림 받을 신청자
 
-        // 3. 반려 처리 (tutors 테이블의 칸 4개 변경)
-        tutor.setApprovalStatus(TutorApprovalStatus.REJECTED); // 상태: 승인 대기 -> 반려
-        tutor.setRejectReason(request.getRejectReason());      // 반려 사유
-        tutor.setApprovedBy(admin);                            // 처리한 관리자
-        tutor.setApprovedAt(LocalDateTime.now());              // 처리 시간
+        // 3. 반려 처리 - PENDING일 때만 바뀌는 UPDATE (상태, 반려 사유, 처리한 관리자, 처리 시간)
+        //    0건 = 다른 관리자가 먼저 처리함 → 400
+        int updated = tutorRepository.processPendingApplication(
+                tutorId, TutorApprovalStatus.REJECTED, request.getRejectReason(), admin, LocalDateTime.now());
+        if (updated == 0) {
+            throw new InvalidStateException("이미 처리된 강사 신청입니다.");
+        }
 
-        // 4. tutors 테이블에 저장
-        tutorRepository.save(tutor);
-
-        // TODO: AlarmService 만든 뒤 신청자에게 반려 알림 보내기
+        // 4. 신청자에게 반려 알림 (사유 포함, 100자 넘으면 AlarmService가 자름)
+        // TODO: 알림 클릭 시 이동할 주소(linkUrl)는 프론트와 협의 후 지정
+        alarmService.send(applicant, AlarmType.CONFIRM,
+                "강사 신청이 반려되었습니다. 사유: " + request.getRejectReason(), null);
     }
 
     //====================================
@@ -171,5 +325,15 @@ public class AdminService {
         }
         // 3. 처리 가능한 신청서 돌려주기
         return tutor;
+    }
+    /**
+     * 저장 파일명에서 원래 파일명만 꺼낸다 (상세 조회·파일 보기 공통)
+     * - 저장 이름이 "uuid(36자) + _ + 원래 파일명" 형태일 때만 앞 37자를 뗌
+     * - 형태가 다르면 자르지 않고 그대로 → 업로드 방식이 바뀌어도 글자가 잘려 나가지 않음
+     */
+    private String toOriginalFileName(String savedName) {
+        return (savedName.length() > 37 && savedName.charAt(36) == '_')
+                ? savedName.substring(37)
+                : savedName;
     }
 }

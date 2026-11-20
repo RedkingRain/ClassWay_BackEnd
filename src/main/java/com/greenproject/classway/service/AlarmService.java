@@ -4,6 +4,7 @@ import com.greenproject.classway.dto.AlarmListResponse;
 import com.greenproject.classway.entity.Alarm;
 import com.greenproject.classway.entity.User;
 import com.greenproject.classway.exceptions.ResourceNotFoundException;
+import com.greenproject.classway.global.AlarmType;
 import com.greenproject.classway.repository.AlarmRepository;
 import com.greenproject.classway.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -65,6 +66,22 @@ public class AlarmService {
         User user = getLoginUser();
         alarmRepository.markAllAsRead(user.getId());
     }
+
+    // 알림 1개 보내기 (다른 서비스에서 호출, 예: 관리자 강사 승인·반려)
+    // - 부르는 쪽 트랜잭션에 함께 묶임 → 부르는 쪽이 실패하면 알림도 같이 취소됨
+    // - 제목은 DB 칸(alarms.title, 100자)보다 길면 잘라서 저장
+    @Transactional
+    public void send(User receiver, AlarmType type, String title, String linkUrl) {
+        Alarm alarm = new Alarm();
+        alarm.setUser(receiver);
+        alarm.setType(type);
+        alarm.setTitle(title.length() > TITLE_MAX_LENGTH ? title.substring(0, TITLE_MAX_LENGTH) : title);
+        alarm.setLinkUrl(linkUrl);
+        alarm.setIsRead(false);
+        alarmRepository.save(alarm);
+    }
+
+    private static final int TITLE_MAX_LENGTH = 100; // alarms.title VARCHAR(100)
 
     // 지금 로그인한 회원 (장바구니 서비스와 같은 방식)
     private User getLoginUser() {
