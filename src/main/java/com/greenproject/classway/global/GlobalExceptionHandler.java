@@ -12,6 +12,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.util.List;
 
@@ -88,6 +89,14 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<String>> handleConflict(ResourceConflictException e) {
         log.error(e.getMessage(), e);
         return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.fail(e.getMessage()));
+    }
+
+    // 요청 값 형식이 틀렸을 때 (예: ?categoryId=abc) 공통 처리(400)
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<String>> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
+        log.error(e.getMessage(), e);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.fail(e.getName() + " 값의 형식이 올바르지 않습니다."));
     }
 
     // 이 외의 예외들은 모두 여기서 공통 처리(500)
