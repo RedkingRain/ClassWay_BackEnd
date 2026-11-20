@@ -8,7 +8,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
-import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -56,14 +55,6 @@ public class GlobalExceptionHandler {
             resultMessage = resultMessage + error.getField() + "은(는)" + error.getDefaultMessage() + "\n";
         }
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiResponse.fail(resultMessage));
-    }
-
-    // 주소·쿼리 값의 형식이 틀렸을 때 (예: /admin/tutors/abc, ?status=ABC) 공통 처리(400)
-    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
-    public ResponseEntity<ApiResponse<String>> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
-        log.error(e.getMessage(), e);
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.fail(e.getName() + " 값의 형식이 올바르지 않습니다."));
     }
 
     // 요청 본문(body)이 없거나 JSON 형식이 깨졌을 때 공통 처리(400)
