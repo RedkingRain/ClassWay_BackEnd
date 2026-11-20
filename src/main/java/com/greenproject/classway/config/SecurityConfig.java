@@ -77,6 +77,9 @@ public class SecurityConfig {
                     // 비로그인도 볼 수 있는 클래스 조회 API (GET만 허용, 등록/수정/삭제는 로그인 필요)
                     .requestMatchers(HttpMethod.GET, "/classes/**")
                     .permitAll()
+                    // 비로그인도 볼 수 있는 약관 조회 API
+                    .requestMatchers(HttpMethod.GET, "/terms/**")
+                    .permitAll()
                     .anyRequest().authenticated() // 나머지 모든 요청은 인증 필요
             ).addFilterBefore(authenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
