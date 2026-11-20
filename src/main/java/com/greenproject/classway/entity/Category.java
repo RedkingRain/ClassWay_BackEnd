@@ -27,3 +27,4 @@ public class Category {
     @Column(name = "sort_order")
     private Integer sortOrder;
 }
+
