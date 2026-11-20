@@ -11,7 +11,7 @@ import org.springframework.core.io.Resource;
 @AllArgsConstructor
 @Getter
 public class TutorFileDownload {
-    private final Resource resource;     // 디스크의 실제 파일
+    private final Resource resource;     // 경로 검사를 통과한 실제 경로(toRealPath)의 파일
     private final String contentType;    // 예: application/pdf (모르면 application/octet-stream)
     private final String fileName;       // 화면에 보일 원래 파일명 (uuid 뗀 이름)
 }

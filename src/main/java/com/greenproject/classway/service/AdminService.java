@@ -34,7 +34,7 @@ import java.util.List;
 
 /**
  * 관리자 페이지 기능의 실제 처리(비즈니스 로직)를 담당하는 클래스
- * - 강사 승인·반려 (ADMIN-002)
+ * - 강사 승인 화면 (ADMIN-002): 신청 목록·탭별 건수·상세·제출 자료 보기, 승인·반려, 처리 결과 알림
  * - 모든 메서드는 첫 줄에서 findLoginAdmin()으로 관리자인지 검사 (아니면 403)
  */
 @Service
@@ -56,6 +56,7 @@ public class AdminService {
         this.tutorsCareerFileRepository = tutorsCareerFileRepository;
         this.alarmService = alarmService;
         // 파일 저장(LocalFileStorageServiceImpl)과 같은 설정값 → 절대 경로로 바꿔 둠
+        // - 실제 경로(toRealPath) 변환은 파일 보기 때 함 (서버 시작 시 폴더가 아직 없으면 여기서 예외가 나 서버가 안 뜰 수 있어서)
         this.uploadRoot = Paths.get(uploadDir).toAbsolutePath().normalize();
     }
 
@@ -173,7 +174,7 @@ public class AdminService {
      * @param fileId  파일 번호 (상세 조회의 files[].fileId)
      * @return 파일 + Content-Type + 원래 파일명
      * @throws ResourceNotFoundException     파일 정보가 없거나 다른 신청서 파일일 때, 디스크에 파일이 없을 때 (404)
-     * @throws AuthorizationFailureException 파일 경로가 업로드 폴더 밖일 때 (403)
+     * @throws AuthorizationFailureException 파일의 실제 위치(바로가기를 따라간 경로)가 업로드 폴더 밖일 때 (403)
      */
     @Transactional(readOnly = true)
     public TutorFileDownload getTutorFile(Integer tutorId, Integer fileId) {
@@ -184,23 +185,32 @@ public class AdminService {
         TutorsCareerFile file = tutorsCareerFileRepository.findByFileIdAndTutor_TutorId(fileId, tutorId)
                 .orElseThrow(() -> new ResourceNotFoundException("존재하지 않는 파일입니다."));
 
-        // 3. DB에 저장된 경로를 절대 경로로 정리 ("../" 같은 표현 제거)
-        Path path = Paths.get(file.getFileUrl()).toAbsolutePath().normalize();
+        // 3. 바로가기(심볼릭 링크)를 끝까지 따라간 "실제 경로"로 변환
+        // - 업로드 폴더도 실제 경로로 구해야 두 경로를 같은 기준으로 비교할 수 있음
+        // - 파일(또는 업로드 폴더)이 실제로 없으면 toRealPath()가 IOException -> 404
+        Path realRoot;
+        Path realPath;
+        try {
+            realRoot = uploadRoot.toRealPath();
+            realPath = Paths.get(file.getFileUrl()).toRealPath();
+        } catch (IOException e) {
+            throw new ResourceNotFoundException("파일을 찾을 수 없습니다.");
+        }
 
-        // 4. 업로드 폴더 밖의 파일이면 막음 (경로 조작으로 서버 파일을 읽는 것 방지)
-        if (!path.startsWith(uploadRoot)) {
+        // 4. 실제 위치가 업로드 폴더 밖이면 막음 (바로가기로 다른 파일을 읽는 것 방지)
+        if (!realPath.startsWith(realRoot)) {
             throw new AuthorizationFailureException("접근할 수 없는 파일입니다.");
         }
 
-        // 5. 디스크에 실제 파일이 없으면 404
-        if (!Files.isRegularFile(path)) {
+        // 5. 폴더 등 일반 파일이 아니면 404 (존재 여부는 3단계에서 이미 확인)
+        if (!Files.isRegularFile(realPath)) {
             throw new ResourceNotFoundException("파일을 찾을 수 없습니다.");
         }
 
         // 6. 파일 종류 판별 (모르면 일반 바이너리)
         String contentType = null;
         try {
-            contentType = Files.probeContentType(path);
+            contentType = Files.probeContentType(realPath);
         } catch (IOException ignored) {
             // 판별 실패 → 아래에서 기본값 사용
         }
@@ -208,9 +218,9 @@ public class AdminService {
             contentType = "application/octet-stream";
         }
 
-        // 7. 파일 + 종류 + 원래 파일명 돌려주기
+        // 7. 검사를 통과한 실제 경로의 파일 + 종류 + 원래 파일명 돌려주기
         return new TutorFileDownload(
-                new FileSystemResource(path),
+                new FileSystemResource(realPath),
                 contentType,
                 toOriginalFileName(file.getFileName())
         );
@@ -221,6 +231,7 @@ public class AdminService {
     /**
      * 승인 대기 중인 강사 신청을 승인한다.
      * - role은 가입 때 이미 TUTOR라서 바꾸지 않음
+     * - 처리 후 신청자에게 승인 알림(CONFIRM)을 보냄
      * @param tutorId 승인할 신청 번호
      */
     @Transactional
@@ -251,6 +262,7 @@ public class AdminService {
      * 승인 대기 중인 강사 신청을 반려한다
      * - 반려 사유가 비었는지는 Controller의 @Valid가 먼저 검사함(400)
      * - approved_by, approved_at의 이름은 "승인"이지만 반려한 관리자·시간도 함께 기록하는 칸임
+     * - 처리 후 신청자에게 반려 알림(CONFIRM, 사유 포함)을 보냄
      * @param tutorId 반려할 신청 번호
      * @param request 반려 사유
      */

@@ -82,7 +82,8 @@ public class AdminController {
     //======================================
     @Operation(summary = "강사 제출 자료 보기 API",
             description = "제출 자료 파일 1개를 바이너리로 응답 (JSON 아님). " +
-                    "파일 정보가 없거나 다른 신청서 파일이면 404, 디스크에 파일이 없으면 404. 관리자만 가능")
+                    "파일 정보가 없거나 다른 신청서 파일이면 404, 디스크에 파일이 없으면 404, " +
+                    "파일의 실제 위치가 업로드 폴더 밖이면 403. 관리자만 가능")
     @GetMapping("/tutors/{tutorId}/files/{fileId}")
     public ResponseEntity<Resource> getTutorFile(
             @PathVariable Integer tutorId,  // 주소의 신청 번호
