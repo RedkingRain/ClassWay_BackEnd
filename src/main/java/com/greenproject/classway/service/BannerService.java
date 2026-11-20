@@ -41,6 +41,6 @@ public class BannerService {
             return false;
         }
         String lowerLink = linkUrl.toLowerCase(Locale.ROOT);
-        return linkUrl.startsWith("/") || linkUrl.startsWith("http://") || linkUrl.startsWith("https://");
+        return lowerLink.startsWith("/") || lowerLink.startsWith("http://") || lowerLink.startsWith("https://");
     }
 }
