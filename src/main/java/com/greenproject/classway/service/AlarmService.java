@@ -14,8 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.List;
 
-// 헤더 알림 목록 , 읽음 처리 (MAIN-001)
-// 모든 기능은 로그인한 본인 알림만 다룸 (회원은 토큰으로 확인)
+// 헤더 알림 목록, 읽음 처리 (MAIN-001), 토큰의 회원 본인 알림만 다룸
 @Service
 @RequiredArgsConstructor
 public class AlarmService {
@@ -23,7 +22,7 @@ public class AlarmService {
     private final AlarmRepository alarmRepository;
     private final UserRepository userRepository;
 
-    // 알림 목록 (최신 20개 + 안 읽은 개수)
+    // 최신 알림 20개와 안 읽은 개수 (MAIN-001)
     @Transactional(readOnly = true)
     public AlarmListResponse getAlarms() {
         User user = getLoginUser();
@@ -46,27 +45,24 @@ public class AlarmService {
                 .build();
     }
 
-    // 알림 1개 읽음
     @Transactional
     public void readAlarm(Integer alarmId) {
         User user = getLoginUser();
 
-        // 번호 + 주인이 맞는 알림만 → 남의 알림 번호면 「없는 알림」
+        // 남의 알림 번호를 넣어도 찾지 못하게 주인 조건을 같이 걸고, 같은 404로 답함
         Alarm alarm = alarmRepository.findByAlarmIdAndUser_Id(alarmId, user.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("존재하지 않는 알림입니다."));
 
-        // 값만 바꾸면 트랜잭션이 끝날 때 JPA가 알아서 UPDATE (save 안 해도 됨)
+        // 트랜잭션이 끝날 때 JPA가 바뀐 값을 UPDATE 해서 save를 부르지 않음
         alarm.setIsRead(true);
     }
 
-    // 모두 읽음
     @Transactional
     public void readAllAlarms() {
         User user = getLoginUser();
         alarmRepository.markAllAsRead(user.getId());
     }
 
-    // 지금 로그인한 회원 (장바구니 서비스와 같은 방식)
     private User getLoginUser() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         return userRepository.findByEmail(email)
