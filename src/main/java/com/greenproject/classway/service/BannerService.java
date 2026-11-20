@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @AllArgsConstructor
@@ -39,7 +40,7 @@ public class BannerService {
         if (linkUrl == null) {
             return false;
         }
-        String lowerLink = linkUrl.toLowerCase();
+        String lowerLink = linkUrl.toLowerCase(Locale.ROOT);
         return linkUrl.startsWith("/") || linkUrl.startsWith("http://") || linkUrl.startsWith("https://");
     }
 }
