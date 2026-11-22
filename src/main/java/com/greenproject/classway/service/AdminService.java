@@ -11,7 +11,7 @@ import com.greenproject.classway.entity.TutorsCareerFile;
 import com.greenproject.classway.entity.User;
 import com.greenproject.classway.exceptions.AuthorizationFailureException;
 import com.greenproject.classway.exceptions.ResourceNotFoundException;
-import com.greenproject.classway.exceptions.InvalidStateException;
+import com.greenproject.classway.exceptions.ResourceConflictException;
 import com.greenproject.classway.global.AlarmType;
 import com.greenproject.classway.global.TutorApprovalStatus;
 import com.greenproject.classway.global.UserRole;
@@ -130,7 +130,7 @@ public class AdminService {
     /**
      * 강사 신청 한 건의 상세 정보 조회 (신청자 정보 + 경력 + 제출 자료 + 처리 결과)
      * - 승인 대기·승인·반려 어느 탭에서 눌러도 볼 수 있어야 함
-     *   → 대기 중인지 검사하는 findPendingTutor(400) 대신, 있는지만 검사하는 findTutor(404) 사용
+     *   → 대기 중인지 검사하는 findPendingTutor(409) 대신, 있는지만 검사하는 findTutor(404) 사용
      * @param tutorId 조회할 신청 번호
      * @return 신청 상세 정보
      */
@@ -239,16 +239,16 @@ public class AdminService {
         // 1. 관리자인지 확인 (아니면 403) -> tutors 테이블에 처리한 관리자 기록용
         User admin = findLoginAdmin();
 
-        // 2. 신청서가 있는지 (404), 아직 승인 대기인지(400) 확인
+        // 2. 신청서가 있는지 (404), 아직 승인 대기인지(409) 확인
         Tutor tutor = findPendingTutor(tutorId);
         User applicant = tutor.getUser(); // 알림 받을 신청자
 
         // 3. 승인 처리 - PENDING일 때만 바뀌는 UPDATE (상태, 처리한 관리자, 처리 시간)
-        //    0건 = 2번 확인 뒤 다른 관리자가 먼저 처리함 → 400
+        //    0건 = 2번 확인 뒤 다른 관리자가 먼저 처리함 → 409
         int updated = tutorRepository.processPendingApplication(
                 tutorId, TutorApprovalStatus.APPROVED, null, admin, LocalDateTime.now());
         if (updated == 0) {
-            throw new InvalidStateException("이미 처리된 강사 신청입니다.");
+            throw new ResourceConflictException("이미 처리된 강사 신청입니다.");
         }
 
         // 4. 신청자에게 승인 알림 (같은 트랜잭션 → 알림 저장이 실패하면 승인도 취소)
@@ -271,16 +271,16 @@ public class AdminService {
         // 1. 관리자인지 확인 (아니면 403) -> 해당 작업 처리한 관리자 기록용
         User admin = findLoginAdmin();
 
-        // 2. 신청서가 있는지(404), 아직 승인 대기인지(400) 확인 -> 승인과 같은 공통 메서드 재사용
+        // 2. 신청서가 있는지(404), 아직 승인 대기인지(409) 확인 -> 승인과 같은 공통 메서드 재사용
         Tutor tutor = findPendingTutor(tutorId);
         User applicant = tutor.getUser(); // 알림 받을 신청자
 
         // 3. 반려 처리 - PENDING일 때만 바뀌는 UPDATE (상태, 반려 사유, 처리한 관리자, 처리 시간)
-        //    0건 = 다른 관리자가 먼저 처리함 → 400
+        //    0건 = 다른 관리자가 먼저 처리함 → 409
         int updated = tutorRepository.processPendingApplication(
                 tutorId, TutorApprovalStatus.REJECTED, request.getRejectReason(), admin, LocalDateTime.now());
         if (updated == 0) {
-            throw new InvalidStateException("이미 처리된 강사 신청입니다.");
+            throw new ResourceConflictException("이미 처리된 강사 신청입니다.");
         }
 
         // 4. 신청자에게 반려 알림 (사유 포함, 100자 넘으면 AlarmService가 자름)
@@ -325,15 +325,15 @@ public class AdminService {
      * 강사 신청서를 찾고, 아직 처리 전(승인 대기) 인지 확인한다. (승인·반려 공통)
      * @param tutorId 신청 번호
      * @throws ResourceNotFoundException 신청서가 없을 때 (404)
-     * @throws InvalidStateException      이미 승인·반려된 신청일 때 (400)
+     * @throws ResourceConflictException  이미 승인·반려된 신청일 때 (409)
      */
     private Tutor findPendingTutor(Integer tutorId) {
         // 1. 신청서 찾기 (없으면 404)
         Tutor tutor = findTutor(tutorId);
 
-        // 2. 승인 대기(PENDING)가 아니면 = 이미 승인 또는 반려됨 -> 400
+        // 2. 승인 대기(PENDING)가 아니면 = 이미 승인 또는 반려됨 -> 409
         if (tutor.getApprovalStatus() != TutorApprovalStatus.PENDING) {
-            throw new InvalidStateException("이미 처리된 강사 신청입니다.");
+            throw new ResourceConflictException("이미 처리된 강사 신청입니다.");
         }
         // 3. 처리 가능한 신청서 돌려주기
         return tutor;

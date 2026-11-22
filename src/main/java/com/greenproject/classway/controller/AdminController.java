@@ -107,7 +107,7 @@ public class AdminController {
     // 강사 승인 (ADMIN-002)
     // =============================
     @Operation(summary = "강사 승인 API",
-    description = "승인 대기 중인 강사 신청을 승인, 이미 처리된 신청이면 400, 없는 신청이면 404. 관리자만 가능")
+    description = "승인 대기 중인 강사 신청을 승인, 이미 처리된 신청이면 409, 없는 신청이면 404. 관리자만 가능")
     @PatchMapping("/tutors/{tutorId}/approve")
     public ResponseEntity<ApiResponse<Void>> approveTutor(
             @PathVariable Integer tutorId
@@ -123,7 +123,7 @@ public class AdminController {
     // =============================
     @Operation(summary = "강사 반려 API",
     description = "승인 대기 중인 강사 신청을 반려. " +
-            "반려 사유 필수(없으면 400), 이미 처리된 신청 400, 없는 신청 404, 관리자만 가능")
+            "반려 사유 필수(없으면 400), 이미 처리된 신청 409, 없는 신청 404, 관리자만 가능")
     @PatchMapping("/tutors/{tutorId}/reject")
     public ResponseEntity<ApiResponse<Void>> rejectTutor(
             @PathVariable Integer tutorId,                 // 주소의 신청 번호
