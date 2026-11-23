@@ -23,7 +23,7 @@ public class InquiryCreateRequest {
     private String title;
 
     @NotBlank
-    @Size(max = 1000)
+    @Size(max = 5000)
     private String content;
 
     @Size(max = 64)
