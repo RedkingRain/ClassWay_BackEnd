@@ -118,6 +118,6 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<String>> handleMaxUploadSize(MaxUploadSizeExceededException e) {
         log.error(e.getMessage(), e);
         return ResponseEntity.status(HttpStatus.CONTENT_TOO_LARGE)
-                .body(ApiResponse.fail("첨부 파일이 너무 큽니다. (파일당 10MB, 전체 30MB까지)"));
+                .body(ApiResponse.fail("업로드 크기가 초과되었습니다. (파일당 10MB, 전체 30MB까지)"));
     }
 }
