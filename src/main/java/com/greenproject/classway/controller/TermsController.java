@@ -31,7 +31,7 @@ public class TermsController {
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
-    @Operation(summary = "약관 버전 목록 조회 API", description = "약관 유형별 시행된 버전 목록 (최신순)")
+    @Operation(summary = "약관 버전 목록 조회 API", description = "약관 유형별 전체 버전 목록 (최신순, 시행 예정 포함, status로 구분)")
     @GetMapping("/{terms_type}/versions")
     public ResponseEntity<ApiResponse<List<TermsVersionResponse>>> getTermsVersions(
             @PathVariable("terms_type") String termsType
@@ -40,7 +40,7 @@ public class TermsController {
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
-    @Operation(summary = "약관 버전 본문 조회 API", description = "약관 유형과 id로 시행된 버전 본문 조회")
+    @Operation(summary = "약관 버전 본문 조회 API", description = "약관 유형과 id로 버전 본문 조회 (시행 예정 포함)")
     @GetMapping("/{terms_type}/versions/{id}")
     public ResponseEntity<ApiResponse<TermsResponse>> getTermsVersion(
             @PathVariable("terms_type") String termsType,
