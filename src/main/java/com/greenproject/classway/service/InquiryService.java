@@ -87,7 +87,7 @@ public class InquiryService {
             throw new ResourceNotFoundException("존재하지 않는 파일입니다.");
         }
 
-        // AdminService.getTutorFile의 경로 검사를 복사/재사용
+        // AdminService.getTutorFile의 경로 검사를 복사함, S3 도입 시 이 로컬 폴더 검사를 S3 조회로 교체
         Path realRoot;
         Path realPath;
         try {
