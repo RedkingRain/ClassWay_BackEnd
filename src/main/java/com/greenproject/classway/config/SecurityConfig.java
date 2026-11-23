@@ -71,8 +71,8 @@ public class SecurityConfig {
                             "/auth/password_reset/check_email"
                     )
                     .permitAll()
-                    // 메인 배너는 비로그인도 조회 가능
-                    .requestMatchers(HttpMethod.GET, "/banners")
+                    // 메인페이지 배너, 후기는 비로그인도 조회 가능
+                    .requestMatchers(HttpMethod.GET, "/banners", "/reviews/main")
                     .permitAll()
                     // Swagger URL 허용
                     .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**")
