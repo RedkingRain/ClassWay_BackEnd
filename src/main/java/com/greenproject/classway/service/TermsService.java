@@ -36,11 +36,23 @@ public class TermsService {
     @Transactional(readOnly = true)
     public List<TermsVersionResponse> getTermsVersions(String termsType) {
         String normalizedType = termsType.trim().toUpperCase(Locale.ROOT);
-        List<Terms> termsList = termsRepository.findEffectiveVersions(normalizedType, LocalDateTime.now());
+        List<Terms> termsList = termsRepository.findAllVersions(normalizedType);
 
+        LocalDateTime now = LocalDateTime.now();
+        boolean currentFound = false;
         List<TermsVersionResponse> result = new ArrayList<>();
         for (Terms terms : termsList) {
-            result.add(new TermsVersionResponse(terms.getId(), terms.getVersion(), terms.getEffectiveDate()));
+            String status;
+            if (terms.getEffectiveDate().isAfter(now)) {
+                status = "UPCOMING";
+            } else if (!currentFound) {
+                // 최신순이라 시행된 것 중 처음 만나는 약관이 지금 적용 중인 약관임
+                status = "CURRENT";
+                currentFound = true;
+            } else {
+                status = "PAST";
+            }
+            result.add(new TermsVersionResponse(terms.getId(), terms.getVersion(), terms.getEffectiveDate(), status));
         }
         return result;
     }
@@ -51,8 +63,8 @@ public class TermsService {
         Terms terms = termsRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("해당하는 약관이 존재하지 않습니다."));
 
-        // 다른 유형의 약관이나 아직 시행 전인 약관이 주소만 바꿔서 보이지 않게 막음
-        if (!terms.getTermsType().equals(normalizedType) || terms.getEffectiveDate().isAfter(LocalDateTime.now())) {
+        // 다른 유형의 약관이 주소만 바꿔서 보이지 않게 막음
+        if (!terms.getTermsType().equals(normalizedType)) {
             throw new ResourceNotFoundException("해당하는 약관이 존재하지 않습니다.");
         }
         return toTermsResponse(terms);

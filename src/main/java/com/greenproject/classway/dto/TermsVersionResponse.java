@@ -11,4 +11,6 @@ public class TermsVersionResponse {
     private final Integer id;
     private final String version;
     private final LocalDateTime effectiveDate;
+    // CURRENT 현재 시행, UPCOMING 시행 예정, PAST 지난 버전
+    private final String status;
 }

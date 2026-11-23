@@ -27,11 +27,7 @@ public interface TermsRepository extends JpaRepository<Terms, Integer> {
     @Query("""
         SELECT t FROM Terms t
         WHERE t.termsType = :termsType
-          AND t.effectiveDate <= :now
         ORDER BY t.effectiveDate DESC, t.id DESC
     """)
-    List<Terms> findEffectiveVersions(
-            @Param("termsType") String termsType,
-            @Param("now") LocalDateTime now
-    );
+    List<Terms> findAllVersions(@Param("termsType") String termsType);
 }
