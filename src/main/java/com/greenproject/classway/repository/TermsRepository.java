@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 public interface TermsRepository extends JpaRepository<Terms, Integer> {
@@ -19,6 +20,17 @@ public interface TermsRepository extends JpaRepository<Terms, Integer> {
         LIMIT 1
     """, nativeQuery = true)
     Optional<Terms> findLatestEffectiveTerms(
+            @Param("termsType") String termsType,
+            @Param("now") LocalDateTime now
+    );
+
+    @Query("""
+        SELECT t FROM Terms t
+        WHERE t.termsType = :termsType
+          AND t.effectiveDate <= :now
+        ORDER BY t.effectiveDate DESC, t.id DESC
+    """)
+    List<Terms> findEffectiveVersions(
             @Param("termsType") String termsType,
             @Param("now") LocalDateTime now
     );
