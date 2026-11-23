@@ -16,6 +16,7 @@ import com.greenproject.classway.repository.ClassEntityRepository;
 import com.greenproject.classway.repository.ClassScheduleRepository;
 import com.greenproject.classway.repository.LectureRepository;
 import com.greenproject.classway.repository.ReservationRepository;
+import com.greenproject.classway.repository.WishRepository;
 import lombok.AllArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,6 +55,7 @@ public class ClassService {
     private final ReservationRepository reservationRepository;
     private final ReviewRepository reviewRepository;
     private final ClassEventRepository classEventRepository;
+    private final WishRepository wishRepository;
 
     // 클래스 목록 한 번에 최대 몇 개까지 줄지
     private static final int MAX_CLASS_PAGE_SIZE = 20;
@@ -141,6 +143,12 @@ public class ClassService {
                     loginEmail, classId, ReservationStatus.RESERVED);
         }
 
+        // 7-1. 찜했는지 — 하트를 채워서 보여주려고
+        boolean isWished = false;
+        if (loginEmail != null) {
+            isWished = wishRepository.existsWish(loginEmail, classId);
+        }
+
         // 8. 강사 — 닉네임만 (실명 · 이메일 · 연락처는 담지 않음)
         Tutor tutor = clazz.getTutor();
         User tutorUser = tutor.getUser();
@@ -181,6 +189,7 @@ public class ClassService {
                 .address(clazz.getAddress())
                 .maxCapacity(maxCapacity)
                 .isEnrolled(isEnrolled)
+                .isWished(isWished)
                 .tutor(tutorInfo)
                 .chapters(chapterInfos)
                 .build();

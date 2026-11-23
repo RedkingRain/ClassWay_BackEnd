@@ -33,6 +33,7 @@ public class ClassDetailResponse {
     private final String address;              // 오프라인만
     private final Integer maxCapacity;         // 오프라인 최대 정원 (온라인은 null)
     private final Boolean isEnrolled;          // 로그인한 사람이 이미 수강 중인지 (비로그인은 false)
+    private final Boolean isWished;            // 로그인한 사람이 찜했는지 (비로그인은 false)
     private final TutorInfo tutor;
     private final List<ChapterInfo> chapters;
 
