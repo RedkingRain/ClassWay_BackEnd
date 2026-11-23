@@ -2,6 +2,7 @@ package com.greenproject.classway.controller;
 
 import com.greenproject.classway.dto.*;
 import com.greenproject.classway.service.ClassService;
+import com.greenproject.classway.service.WishService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.AllArgsConstructor;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.PostMapping;
 
 import java.util.List;
 
@@ -23,6 +25,7 @@ import java.util.List;
 @AllArgsConstructor
 public class ClassController {
     private final ClassService classService;
+    private final WishService wishService;
 
     @Operation(summary = "클래스 상세 조회 API", description = "공개 클래스의 상세 정보 / 강사 / 커리큘럼 (로그인 시 수강 여부 포함)")
     @GetMapping("/{classId}")
@@ -34,6 +37,16 @@ public class ClassController {
         String loginEmail = (userDetails != null) ? userDetails.getUsername() : null;
 
         ClassDetailResponse result = classService.getClassDetail(classId, loginEmail);
+        return ResponseEntity.ok(ApiResponse.ok(result));
+    }
+
+    @Operation(summary = "찜하기 버튼 API", description = "로그인 회원만. 찜 안 했으면 추가, 했으면 해제 후 찜 여부와 찜 수 반환")
+    @PostMapping("/{classId}/wish")
+    public ResponseEntity<ApiResponse<WishToggleResponse>> toggleWish(
+            @PathVariable Integer classId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+
+        WishToggleResponse result = wishService.toggleWish(classId, userDetails.getUsername());
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
