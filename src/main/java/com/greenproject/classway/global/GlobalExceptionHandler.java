@@ -12,6 +12,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.util.List;
 
@@ -110,5 +111,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<String>> handleBadRequest(InvalidStateException e) {
         log.error(e.getMessage(), e);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiResponse.fail(e.getMessage()));
+    }
+
+    // 업로드 파일이 application.properties의 multipart 크기 제한을 넘었을 때(413)
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<String>> handleMaxUploadSize(MaxUploadSizeExceededException e) {
+        log.error(e.getMessage(), e);
+        return ResponseEntity.status(HttpStatus.CONTENT_TOO_LARGE)
+                .body(ApiResponse.fail("첨부 파일이 너무 큽니다. (파일당 10MB, 전체 30MB까지)"));
     }
 }
