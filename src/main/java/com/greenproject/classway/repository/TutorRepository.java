@@ -16,6 +16,9 @@ import java.util.Optional;
 public interface TutorRepository extends JpaRepository<Tutor, Integer> {
     Optional<Tutor> findByUserId(Integer userId);
 
+    // 로그인 이메일로 강사 정보 조회
+    Optional<Tutor> findByUser_Email(String email);
+
     // 승인 상태별 강사 신청 목록 (신청일 오래된 순)- 관리자 페이지의 강사 승인 화면용
     // @EntityGraph: 신청자(users)를 JOIN으로 한 번에 같이 가져옴 (신청서마다 users를 따로 조회하는 N+1 방지)
     @EntityGraph(attributePaths = "user")

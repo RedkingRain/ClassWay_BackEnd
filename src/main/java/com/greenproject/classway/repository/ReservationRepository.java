@@ -32,4 +32,23 @@ public interface ReservationRepository extends JpaRepository<Reservation, Intege
                                       @Param("canceled") ReservationStatus canceled,
                                       @Param("published") ClassStatus published,
                                       Pageable pageable);
+
+    // 온라인 수강생 수 집계용 프로젝션 인터페이스
+    interface ReservationCountProjection {
+        Integer getClassId();
+        Long getStudentCount();
+    }
+
+    // 여러 클래스의 유효 수강생 수를 한 번에 조회
+    @Query("""
+            SELECT r.clazz.classId AS classId, COUNT(r) AS studentCount
+            FROM Reservation r
+            WHERE r.clazz.classId IN :classIds
+              AND r.status IN :statuses
+            GROUP BY r.clazz.classId
+            """)
+    List<ReservationCountProjection> countReservationsByClassIds(
+            @Param("classIds") List<Integer> classIds,
+            @Param("statuses") List<ReservationStatus> statuses
+    );
 }
