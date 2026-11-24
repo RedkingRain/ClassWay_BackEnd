@@ -52,10 +52,10 @@ public class TutorClassService {
         // 등록된 클래스가 0건이면 빈 목록을 정상 반환
         if (classPage.isEmpty()) {
             return TutorClassListResponse.builder()
-                    .totalCount(0)
-                    .totalPages(0)
+                    .totalCount(classPage.getTotalElements())   // 실제 전체 건수 (예: 14건) 유지
+                    .totalPages(classPage.getTotalPages())      // 실제 전체 페이지 수 (예: 3페이지) 유지
                     .currentPage(safePage)
-                    .classes(Collections.emptyList())
+                    .classes(Collections.emptyList())           // 데이터 목록만 빈 리스트 반환
                     .build();
         }
 
