@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 public interface TermsRepository extends JpaRepository<Terms, Integer> {
@@ -22,4 +23,11 @@ public interface TermsRepository extends JpaRepository<Terms, Integer> {
             @Param("termsType") String termsType,
             @Param("now") LocalDateTime now
     );
+
+    @Query("""
+        SELECT t FROM Terms t
+        WHERE t.termsType = :termsType
+        ORDER BY t.effectiveDate DESC, t.id DESC
+    """)
+    List<Terms> findAllVersions(@Param("termsType") String termsType);
 }

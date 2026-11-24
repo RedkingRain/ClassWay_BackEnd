@@ -1,5 +1,9 @@
 package com.greenproject.classway.service.file;
 
+import com.greenproject.classway.exceptions.AuthorizationFailureException;
+import com.greenproject.classway.exceptions.ResourceNotFoundException;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
@@ -54,5 +58,25 @@ public class LocalFileStorageServiceImpl implements FileStorageService {
             }
         }
         return filePaths;
+    }
+
+    @Override
+    public Resource loadFile(String path) {
+        Path realRoot;
+        Path realPath;
+        try {
+            realRoot = Paths.get(uploadDir).toAbsolutePath().normalize().toRealPath();
+            realPath = Paths.get(path).toRealPath();
+        } catch (IOException e) {
+            throw new ResourceNotFoundException("파일을 찾을 수 없습니다.");
+        }
+        // DB 경로가 조작돼도 업로드 폴더 밖의 파일은 읽지 못하게 막음
+        if (!realPath.startsWith(realRoot)) {
+            throw new AuthorizationFailureException("접근할 수 없는 파일입니다.");
+        }
+        if (!Files.isRegularFile(realPath)) {
+            throw new ResourceNotFoundException("파일을 찾을 수 없습니다.");
+        }
+        return new FileSystemResource(realPath);
     }
 }
