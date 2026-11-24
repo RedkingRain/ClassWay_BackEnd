@@ -83,7 +83,7 @@ public class ClassService {
 
         // 2. 커리큘럼: 챕터 목록 + 강의 전체를 한 번씩만 조회한 뒤, 챕터별로 나눠 담기
         List<ClassChapter> chapters = classChapterRepository.findByClazz_ClassIdOrderBySortOrderAsc(classId);
-        List<Lecture> lectures = lectureRepository.findByChapter_Clazz_ClassIdOrderBySortOrderAsc(classId);
+        List<Lecture> lectures = lectureRepository.findByClassIdOrderBySortOrderAsc(classId);
 
         List<ClassDetailResponse.ChapterInfo> chapterInfos = new ArrayList<>();
         for (ClassChapter chapter : chapters) {

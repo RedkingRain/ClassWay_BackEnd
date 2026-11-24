@@ -8,8 +8,8 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 
 public interface LectureRepository extends JpaRepository<Lecture, Integer> {
-    // 클래스의 강의 전체를 한 번에 (강의 -> 챕터 -> 클래스 번호로 찾기)
-    List<Lecture> findByChapter_Clazz_ClassIdOrderBySortOrderAsc(Integer classId);
+    // 클래스의 강의 전체 (챕터 번호는 클래스마다 겹쳐서, 강의에 적힌 클래스 번호로 찾음)
+    List<Lecture> findByClassIdOrderBySortOrderAsc(Integer classId);
 
     // 결과 한 줄: 클래스 번호 + 강의 길이 합계(초)
     interface ClassDurationRow {
@@ -20,10 +20,10 @@ public interface LectureRepository extends JpaRepository<Lecture, Integer> {
 
     // 여러 클래스의 강의 길이 합계를 한 번에 (클래스 번호별로 묶어서)
     @Query("""
-            SELECT l.chapter.clazz.classId AS classId, SUM(l.durationSec) AS totalSeconds
+            SELECT l.classId AS classId, SUM(l.durationSec) AS totalSeconds
             FROM Lecture l
-            WHERE l.chapter.clazz.classId IN :classIds
-            GROUP BY l.chapter.clazz.classId
+            WHERE l.classId IN :classIds
+            GROUP BY l.classId
             """)
     List<ClassDurationRow> sumDurationByClassIds(@Param("classIds") List<Integer> classIds);
 }

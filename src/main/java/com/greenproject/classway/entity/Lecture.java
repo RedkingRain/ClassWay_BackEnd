@@ -15,6 +15,9 @@ public class Lecture {
     @Column(name = "lecture_id")
     private Integer lectureId;
 
+    @Column(name = "class_id", nullable = false)
+    private Integer classId;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "chapter_id", nullable = false)
     private ClassChapter chapter;
