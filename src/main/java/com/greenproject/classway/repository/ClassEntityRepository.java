@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.data.jpa.repository.Modifying;
 
 import java.util.List;
 import java.util.Optional;
@@ -57,4 +58,18 @@ public interface ClassEntityRepository extends JpaRepository<ClassEntity, Intege
             """)
     List<Integer> findIdsByStatusAndClassType(@Param("status") ClassStatus status,
                                               @Param("classType") ClassType classType);
+
+    // 찜 수 +1: DB가 직접 더해서 동시에 눌러도 숫자가 틀어지지 않음
+    @Modifying
+    @Query("UPDATE ClassEntity c SET c.wishCount = c.wishCount + 1 WHERE c.classId = :classId")
+    int increaseWishCount(@Param("classId") Integer classId);
+
+    // 찜 수 -1: 0보다 클 때만 (음수 방지)
+    @Modifying
+    @Query("UPDATE ClassEntity c SET c.wishCount = c.wishCount - 1 WHERE c.classId = :classId AND c.wishCount > 0")
+    int decreaseWishCount(@Param("classId") Integer classId);
+
+    // 찜 수 칸 값: 목록, 상세와 같은 숫자를 돌려주려고 DB에서 새로 읽음
+    @Query("SELECT c.wishCount FROM ClassEntity c WHERE c.classId = :classId")
+    Integer findWishCount(@Param("classId") Integer classId);
 }
