@@ -2,7 +2,7 @@ package com.greenproject.classway.controller;
 
 import com.greenproject.classway.dto.ApiResponse;
 import com.greenproject.classway.dto.InquiryCreateRequest;
-import com.greenproject.classway.dto.TutorFileDownload;
+import com.greenproject.classway.dto.InquiryFileDownload;
 import com.greenproject.classway.service.InquiryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -43,7 +43,7 @@ public class InquiryController {
             @PathVariable Integer inquiryId,
             @PathVariable Integer fileId
     ) {
-        TutorFileDownload file = inquiryService.getInquiryFile(inquiryId, fileId);
+        InquiryFileDownload file = inquiryService.getInquiryFile(inquiryId, fileId);
 
         // 브라우저에서 바로 열리고(inline) 한글 파일 이름이 깨지지 않게(UTF-8) 함
         ContentDisposition disposition = ContentDisposition.inline()

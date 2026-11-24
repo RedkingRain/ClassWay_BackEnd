@@ -1,11 +1,10 @@
 package com.greenproject.classway.service;
 
 import com.greenproject.classway.dto.InquiryCreateRequest;
-import com.greenproject.classway.dto.TutorFileDownload;
+import com.greenproject.classway.dto.InquiryFileDownload;
 import com.greenproject.classway.entity.Inquiry;
 import com.greenproject.classway.entity.InquiryFile;
 import com.greenproject.classway.entity.User;
-import com.greenproject.classway.exceptions.AuthorizationFailureException;
 import com.greenproject.classway.exceptions.InvalidStateException;
 import com.greenproject.classway.exceptions.ResourceNotFoundException;
 import com.greenproject.classway.global.FileStatus;
@@ -15,17 +14,13 @@ import com.greenproject.classway.repository.InquiryRepository;
 import com.greenproject.classway.repository.UserRepository;
 import com.greenproject.classway.service.file.FileStorageService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.FileSystemResource;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
-
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import org.springframework.core.io.Resource;
+import org.springframework.http.MediaType;
+import org.springframework.http.MediaTypeFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -43,9 +38,6 @@ public class InquiryService {
     private final UserRepository userRepository;
     private final FileStorageService fileStorageService;
 
-    @Value("${spring.file.storage}")
-    private String uploadDir;
-
     @Transactional
     public void createInquiry(InquiryCreateRequest request) {
         List<MultipartFile> files = getValidFiles(request.getFiles());
@@ -61,20 +53,19 @@ public class InquiryService {
         inquiryRepository.save(inquiry);
 
         // DB 저장이 실패해도 이미 저장된 파일은 폴더에 남음, 파일이 많아지면 정리 작업 추가
-        for (MultipartFile file : files) {
-            String path = fileStorageService.storeFiles(List.of(file)).get(0);
-
+        List<String> paths = fileStorageService.storeFiles(files);
+        for (int i = 0; i < files.size(); i++) {
             InquiryFile inquiryFile = new InquiryFile();
             inquiryFile.setInquiry(inquiry);
-            inquiryFile.setFileName(file.getOriginalFilename());
-            inquiryFile.setFileUrl(path);
+            inquiryFile.setFileName(files.get(i).getOriginalFilename());
+            inquiryFile.setFileUrl(paths.get(i));
             inquiryFile.setStatus(FileStatus.ACTIVE);
             inquiryFileRepository.save(inquiryFile);
         }
     }
 
     @Transactional(readOnly = true)
-    public TutorFileDownload getInquiryFile(Integer inquiryId, Integer fileId) {
+    public InquiryFileDownload getInquiryFile(Integer inquiryId, Integer fileId) {
         User loginUser = getLoginUser();
         InquiryFile file = inquiryFileRepository.findById(fileId)
                 .orElseThrow(() -> new ResourceNotFoundException("존재하지 않는 파일입니다."));
@@ -86,33 +77,12 @@ public class InquiryService {
         if (!inquiry.getInquiryId().equals(inquiryId) || inquiry.getIsDeleted() || !(isOwner || isAdmin)) {
             throw new ResourceNotFoundException("존재하지 않는 파일입니다.");
         }
-
-        // AdminService.getTutorFile의 경로 검사를 복사함, S3 도입 시 이 로컬 폴더 검사를 S3 조회로 교체
-        Path realRoot;
-        Path realPath;
-        try {
-            realRoot = Paths.get(uploadDir).toAbsolutePath().normalize().toRealPath();
-            realPath = Paths.get(file.getFileUrl()).toRealPath();
-        } catch (IOException e) {
-            throw new ResourceNotFoundException("파일을 찾을 수 없습니다.");
-        }
-        if (!realPath.startsWith(realRoot)) {
-            throw new AuthorizationFailureException("접근할 수 없는 파일입니다.");
-        }
-        if (!Files.isRegularFile(realPath)) {
-            throw new ResourceNotFoundException("파일을 찾을 수 없습니다.");
-        }
-
-        String contentType = null;
-        try {
-            contentType = Files.probeContentType(realPath);
-        } catch (IOException ignored) {
-            // 판별 실패 시 아래 기본값 사용
-        }
-        if (contentType == null) {
-            contentType = "application/octet-stream";
-        }
-        return new TutorFileDownload(new FileSystemResource(realPath), contentType, file.getFileName());
+        Resource resource = fileStorageService.loadFile(file.getFileUrl());
+        // 디스크가 아니라 이름으로 판별해서 S3로 바뀌어도 그대로 쓸 수 있게 함
+        String contentType = MediaTypeFactory.getMediaType(file.getFileName())
+                .orElse(MediaType.APPLICATION_OCTET_STREAM)
+                .toString();
+        return new InquiryFileDownload(resource, contentType, file.getFileName());
     }
 
     private List<MultipartFile> getValidFiles(List<MultipartFile> files) {

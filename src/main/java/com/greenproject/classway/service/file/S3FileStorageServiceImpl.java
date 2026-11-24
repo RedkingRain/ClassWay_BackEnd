@@ -1,5 +1,6 @@
 package com.greenproject.classway.service.file;
 
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import java.util.ArrayList;
@@ -22,5 +23,11 @@ public class S3FileStorageServiceImpl implements FileStorageService {
             // fileUrls.add(s3Url); // DB에는 S3 URL이 저장됨
         }
         return fileUrls;
+    }
+
+    @Override
+    public Resource loadFile(String path) {
+        // TODO: AWS S3에서 파일 꺼내기 (S3 도입 시 구현)
+        throw new UnsupportedOperationException("S3 파일 조회는 아직 구현되지 않았습니다.");
     }
 }
