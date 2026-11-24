@@ -33,6 +33,7 @@ public class TutorClassService {
     private final ReservationRepository reservationRepository;
 
     private static final int DEFAULT_PAGE_SIZE = 6; // 시안 기준 (3열 × 2줄)
+    private static final int MAX_PAGE_SIZE = 20;    // 한 번에 조회 가능한 최대 크기 (상한선)
 
     /**
      * 1. 강사 등록 클래스 목록 조회
@@ -44,7 +45,7 @@ public class TutorClassService {
 
         // [2단계] 강사가 등록한 클래스 페이징 조회 (최신 등록순)
         int safePage = Math.max(page, 0);
-        int safeSize = (size > 0) ? size : DEFAULT_PAGE_SIZE;
+        int safeSize = (size <= 0) ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
         Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "classId"));
 
         Page<ClassEntity> classPage = classEntityRepository.findByTutor_TutorId(tutor.getTutorId(), pageable);
