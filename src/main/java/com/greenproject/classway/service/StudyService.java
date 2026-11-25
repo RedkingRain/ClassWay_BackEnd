@@ -64,7 +64,7 @@ public class StudyService {
         if (clazz.getClassType() == ClassType.ONLINE) {
             chapterInfos = getChapterInfos(classId);
         } else if (!isTutor) {
-            nextScheduleAt = findNextScheduleAt(classId, loginUser.getEmail());
+            nextScheduleAt = findNextScheduleAt(classId, loginUser.getId());
         }
 
         return StudyDashboardResponse.builder()
@@ -90,7 +90,7 @@ public class StudyService {
             return;
         }
         long reservationCount = reservationRepository.countStudyReservation(
-                loginUser.getEmail(), clazz.getClassId(), STUDY_STATUSES);
+                loginUser.getId(), clazz.getClassId(), STUDY_STATUSES);
         if (reservationCount == 0) {
             throw new AuthorizationFailureException("수강 중인 회원만 볼 수 있습니다.");
         }
@@ -126,9 +126,9 @@ public class StudyService {
         return chapterInfos;
     }
 
-    private LocalDateTime findNextScheduleAt(Integer classId, String email) {
+    private LocalDateTime findNextScheduleAt(Integer classId, Integer userId) {
         List<LocalDateTime> startTimes = reservationRepository.findNextScheduleStartAt(
-                email, classId, STUDY_STATUSES, LocalDateTime.now(), PageRequest.of(0, 1));
+                userId, classId, STUDY_STATUSES, LocalDateTime.now(), PageRequest.of(0, 1));
         if (startTimes.isEmpty()) {
             return null;
         }

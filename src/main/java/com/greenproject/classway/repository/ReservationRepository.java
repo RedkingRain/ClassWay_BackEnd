@@ -21,11 +21,11 @@ public interface ReservationRepository extends JpaRepository<Reservation, Intege
     @Query("""
             SELECT COUNT(r)
             FROM Reservation r
-            WHERE r.user.email = :email
+            WHERE r.user.id = :userId
               AND r.clazz.classId = :classId
               AND r.status IN :statuses
             """)
-    long countStudyReservation(@Param("email") String email,
+    long countStudyReservation(@Param("userId") Integer userId,
                                @Param("classId") Integer classId,
                                @Param("statuses") List<ReservationStatus> statuses);
 
@@ -33,13 +33,13 @@ public interface ReservationRepository extends JpaRepository<Reservation, Intege
     @Query("""
             SELECT r.schedule.startAt
             FROM Reservation r
-            WHERE r.user.email = :email
+            WHERE r.user.id = :userId
               AND r.clazz.classId = :classId
               AND r.status IN :statuses
               AND r.schedule.startAt >= :now
             ORDER BY r.schedule.startAt ASC
             """)
-    List<LocalDateTime> findNextScheduleStartAt(@Param("email") String email,
+    List<LocalDateTime> findNextScheduleStartAt(@Param("userId") Integer userId,
                                                 @Param("classId") Integer classId,
                                                 @Param("statuses") List<ReservationStatus> statuses,
                                                 @Param("now") LocalDateTime now,
