@@ -21,6 +21,9 @@ public interface ClassEntityRepository extends JpaRepository<ClassEntity, Intege
     // 강사의 공개 클래스 수 (강사 카드 [클래스 N개 운영])
     long countByTutor_TutorIdAndStatus(Integer tutorId, ClassStatus status);
 
+    // 강사 ID로 등록된 클래스 페이징 조회 (최신 등록순)
+    Page<ClassEntity> findByTutor_TutorId(Integer tutorId, Pageable pageable);
+
     // 공개 클래스 검색 (MAIN-002): 조건 값이 null이면 그 조건은 통과 (조건 안 씀)
     // keyword: 제목, 한 줄 소개, 강사 닉네임 포함 / region: 앞부분 일치 (예: '서울' → '서울 마포구')
     @EntityGraph(attributePaths = {"category", "tutor", "tutor.user"})

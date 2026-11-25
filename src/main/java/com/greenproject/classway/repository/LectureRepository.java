@@ -26,4 +26,19 @@ public interface LectureRepository extends JpaRepository<Lecture, Integer> {
             GROUP BY l.chapter.clazz.classId
             """)
     List<ClassDurationRow> sumDurationByClassIds(@Param("classIds") List<Integer> classIds);
+
+    // 온라인 VOD 강의 수 집계용 프로젝션 인터페이스
+    interface LectureCountProjection {
+        Integer getClassId();
+        Long getLectureCount();
+    }
+
+    // 여러 클래스의 VOD 강의 수를 한 번에 조회
+    @Query("""
+            SELECT l.chapter.clazz.classId AS classId, COUNT(l) AS lectureCount
+            FROM Lecture l
+            WHERE l.chapter.clazz.classId IN :classIds
+            GROUP BY l.chapter.clazz.classId
+            """)
+    List<LectureCountProjection> countLecturesByClassIds(@Param("classIds") List<Integer> classIds);
 }
