@@ -17,6 +17,34 @@ public interface ReservationRepository extends JpaRepository<Reservation, Intege
     // 이 회원이 이 클래스를 수강 중인지 (로그인 토큰의 이메일로 확인)
     boolean existsByUser_EmailAndClazz_ClassIdAndStatus(String email, Integer classId, ReservationStatus status);
 
+    // 학습 페이지 입장 권한: 들어올 수 있는 상태의 예약 수 (0이면 권한 없음)
+    @Query("""
+            SELECT COUNT(r)
+            FROM Reservation r
+            WHERE r.user.id = :userId
+              AND r.clazz.classId = :classId
+              AND r.status IN :statuses
+            """)
+    long countStudyReservation(@Param("userId") Integer userId,
+                               @Param("classId") Integer classId,
+                               @Param("statuses") List<ReservationStatus> statuses);
+
+    // 오프라인 상단 일시: 내 예약 회차 중 앞으로 남은 가장 가까운 것 (pageable로 1개만)
+    @Query("""
+            SELECT r.schedule.startAt
+            FROM Reservation r
+            WHERE r.user.id = :userId
+              AND r.clazz.classId = :classId
+              AND r.status IN :statuses
+              AND r.schedule.startAt >= :now
+            ORDER BY r.schedule.startAt ASC
+            """)
+    List<LocalDateTime> findNextScheduleStartAt(@Param("userId") Integer userId,
+                                                @Param("classId") Integer classId,
+                                                @Param("statuses") List<ReservationStatus> statuses,
+                                                @Param("now") LocalDateTime now,
+                                                Pageable pageable);
+
     // 최근 예약 많은 클래스 번호 (취소 제외, 공개 클래스만, 예약 수 같으면 최신 등록순)
     // 몇 개까지 꺼낼지는 pageable로 정함 (TOP 10 → PageRequest.of(0, 10))
     @Query("""
