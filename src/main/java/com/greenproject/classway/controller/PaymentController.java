@@ -8,12 +8,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
-@Tag(name = "Payment API", description = "결제 준비 및 토스페이먼츠 승인 API 모듈입니다.")
+@Tag(name = "Payment API", description = "결제 준비, 승인, 상태 확인 및 환불 API 모듈입니다.")
 @RestController
 @RequestMapping("/payment")
 @RequiredArgsConstructor
@@ -38,6 +35,26 @@ public class PaymentController {
             @Valid @RequestBody ConfirmRequest request
     ) {
         ConfirmResponse response = paymentService.confirmOrder(request);
+        return ResponseEntity.ok(ApiResponse.ok(response));
+    }
+
+    @Operation(summary = "결제 상태 재확인 API",
+               description = "결제 처리 중(PROCESSING) 상태인 주문에 대해 최종 승인 완료 여부를 재확인합니다.")
+    @GetMapping("/orders/{order_no}/status")
+    public ResponseEntity<ApiResponse<ConfirmResponse>> checkOrderStatus(
+            @PathVariable("order_no") String orderNo
+    ) {
+        ConfirmResponse response = paymentService.checkOrderStatus(orderNo);
+        return ResponseEntity.ok(ApiResponse.ok(response));
+    }
+
+    @Operation(summary = "정책 기반 사용자 결제 취소/환불 API",
+               description = "결제 완료된 주문에 대해 취소·환불 규정을 검증한 후 토스페이먼츠 결제 취소 및 자원을 반환합니다.")
+    @PostMapping("/refund_order")
+    public ResponseEntity<ApiResponse<RefundResponse>> refundOrder(
+            @Valid @RequestBody RefundRequest request
+    ) {
+        RefundResponse response = paymentService.refundOrder(request);
         return ResponseEntity.ok(ApiResponse.ok(response));
     }
 

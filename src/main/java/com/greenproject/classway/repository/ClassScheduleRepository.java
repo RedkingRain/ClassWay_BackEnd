@@ -2,7 +2,9 @@ package com.greenproject.classway.repository;
 
 import com.greenproject.classway.entity.ClassSchedule;
 import com.greenproject.classway.global.ScheduleStatus;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -46,4 +48,8 @@ public interface ClassScheduleRepository extends JpaRepository<ClassSchedule, In
             GROUP BY s.clazz.classId
             """)
     List<OfflineSummaryProjection> summarizeSchedulesByClassIds(@Param("classIds") List<Integer> classIds);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT s FROM ClassSchedule s WHERE s.scheduleId = :scheduleId")
+    Optional<ClassSchedule> findByIdWithLock(@Param("scheduleId") Integer scheduleId);
 }

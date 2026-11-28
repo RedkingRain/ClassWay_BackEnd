@@ -6,5 +6,6 @@ public enum OrderItemStatus {
     FAILED,
     CANCEL_REQUESTED,
     CANCELED,
-    REFUNDED
+    REFUNDED,
+    EXPIRED
 }

@@ -17,8 +17,12 @@ public interface OrderItemRepository extends JpaRepository<OrderItem, Integer> {
     @Query(value = """
         SELECT COALESCE(SUM(oi.quantity), 0)
         FROM order_items oi
+        JOIN orders o ON oi.order_id = o.order_id
         WHERE oi.schedule_id = :scheduleId
-          AND oi.status IN ('PENDING', 'PAID')
+          AND (
+            oi.status = 'PAID'
+            OR (oi.status = 'PENDING' AND o.expires_at > NOW())
+          )
     """, nativeQuery = true)
     int countReservedCapacity(@Param("scheduleId") Integer scheduleId);
 }

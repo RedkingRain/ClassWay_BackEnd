@@ -13,4 +13,5 @@ import java.util.Optional;
 public interface PaymentRepository extends JpaRepository<Payment, Integer> {
     void deleteByOrderInAndStatus(List<Order> orders, PaymentStatus status);
     Optional<Payment> findByOrder(Order order);
+    List<Payment> findByStatus(PaymentStatus status);
 }

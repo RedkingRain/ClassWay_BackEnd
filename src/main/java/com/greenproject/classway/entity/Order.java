@@ -42,4 +42,7 @@ public class Order {
 
     @Column(name = "ordered_at", nullable = false, insertable = false, updatable = false)
     private LocalDateTime orderedAt;
+
+    @Column(name = "expires_at", nullable = false)
+    private LocalDateTime expiresAt;
 }

@@ -1,5 +1,6 @@
 package com.greenproject.classway.repository;
 
+import com.greenproject.classway.entity.OrderItem;
 import com.greenproject.classway.entity.Reservation;
 import com.greenproject.classway.global.ClassStatus;
 import com.greenproject.classway.global.ReservationStatus;
@@ -10,6 +11,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 public interface ReservationRepository extends JpaRepository<Reservation, Integer> {
     // 수강생 수: 예약 확정(RESERVED) , 수업 완료(COMPLETED) 건수
@@ -79,4 +81,6 @@ public interface ReservationRepository extends JpaRepository<Reservation, Intege
             @Param("classIds") List<Integer> classIds,
             @Param("statuses") List<ReservationStatus> statuses
     );
+
+    Optional<Reservation> findByOrderItem(OrderItem orderItem);
 }
