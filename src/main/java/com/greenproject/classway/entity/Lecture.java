@@ -18,8 +18,14 @@ public class Lecture {
     @Column(name = "class_id", nullable = false)
     private Integer classId;
 
+    @Column(name = "chapter_id", nullable = false)
+    private Integer chapterId;
+
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "chapter_id", nullable = false)
+    @JoinColumns({
+            @JoinColumn(name = "class_id", referencedColumnName = "class_id", insertable = false, updatable = false),
+            @JoinColumn(name = "chapter_id", referencedColumnName = "chapter_id", insertable = false, updatable = false)
+    })
     private ClassChapter chapter;
 
     @Column(nullable = false, length = 100)

@@ -22,7 +22,7 @@ public class ClassImageFile {
     private ClassEntity clazz;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "lecture_id", nullable = false)
+    @JoinColumn(name = "lecture_id", nullable = true)
     private Lecture lecture;
 
     @Column(name = "file_name", nullable = false, length = 255)

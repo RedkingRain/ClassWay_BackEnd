@@ -5,19 +5,20 @@ import lombok.*;
 
 @Entity
 @Table(name = "class_chapters")
+@IdClass(ClassChapterId.class)
 @AllArgsConstructor
 @NoArgsConstructor
 @Getter
 @Setter
 public class ClassChapter {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "chapter_id")
-    private Integer chapterId;
-
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "class_id", nullable = false)
     private ClassEntity clazz;
+
+    @Id
+    @Column(name = "chapter_id", nullable = false)
+    private Integer chapterId;
 
     @Column(nullable = false, length = 100)
     private String title;
